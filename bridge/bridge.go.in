@@ -1,0 +1,175 @@
+package bridge
+
+// #cgo CFLAGS: -I${INCLUDE_PATH}
+// #cgo LDFLAGS: ${LIBRARY_PATH} -lstdc++
+/*
+#include <go_bridge.h>
+
+char * bridgeGetFuncName(int moduleIndex, int funcIndex);
+*/
+import "C"
+import (
+	"fmt"
+	"sync"
+	"unsafe"
+
+  "github.com/firodj/ppsspp/disasm/pspdisasm/models"
+)
+
+type CSymbolMap C.BridgeSymbolMap
+type funcGetFuncName func(int, int) string
+
+var g_GetFuncName funcGetFuncName = nil
+var g_AllocatedCString []*C.char = nil
+var m sync.Mutex
+var g_memoryBase unsafe.Pointer = nil
+
+func FreeAllocatedCString() {
+  m.Lock()
+  defer m.Unlock()
+
+  for _, cstr := range g_AllocatedCString {
+    C.free(unsafe.Pointer(cstr))
+  }
+  g_AllocatedCString = nil
+}
+
+func AllocateCString(str string) *C.char {
+  m.Lock()
+  defer m.Unlock()
+
+  cstr := C.CString(str)
+  g_AllocatedCString = append(g_AllocatedCString, cstr)
+  return cstr
+}
+
+func GlobalSetMemoryBase(data []byte, startAddress uint32) unsafe.Pointer {
+  g_oldMemoryBase := g_memoryBase
+  if g_oldMemoryBase != nil {
+    defer C.free(g_oldMemoryBase)
+  }
+
+  if data == nil {
+    g_memoryBase = nil
+  } else {
+    g_memoryBase = C.CBytes(data)
+  }
+
+  C.GlobalSetMemoryBase(g_memoryBase, C.uint32_t(startAddress))
+  return g_memoryBase
+}
+
+func NewSymbolMap() CSymbolMap {
+  return CSymbolMap(C.NewSymbolMap())
+}
+
+func DeleteSymbolMap(symmap CSymbolMap) {
+  C.DeleteSymbolMap(C.BridgeSymbolMap(symmap))
+}
+
+func SymbolMap_GetFunctionSize(symmap CSymbolMap, startAddress uint32) uint32 {
+  return uint32(C.SymbolMap_GetFunctionSize(
+    C.BridgeSymbolMap(symmap), C.uint32_t(startAddress),
+  ))
+}
+
+func SymbolMap_GetFunctionStart(symmap CSymbolMap, address uint32) uint32 {
+  return uint32(C.SymbolMap_GetFunctionStart(
+    C.BridgeSymbolMap(symmap), C.uint32_t(address),
+  ))
+}
+
+func SymbolMap_GetLabelName(symmap CSymbolMap, address uint32) *string {
+  cstr := C.SymbolMap_GetLabelName(
+    C.BridgeSymbolMap(symmap), C.uint32_t(address),
+  )
+  if cstr == nil {
+    return nil
+  }
+  str := C.GoString(cstr)
+  return &str
+}
+
+func SymbolMap_AddFunction(symmap CSymbolMap, name string, address uint32, size uint32, moduleIndex int) {
+  nameStr := C.CString(name)
+  defer C.free(unsafe.Pointer(nameStr))
+
+  C.SymbolMap_AddFunction(
+    C.BridgeSymbolMap(symmap),
+    nameStr,
+    C.uint32_t(address),
+    C.uint32_t(size),
+    C.int(moduleIndex),
+  )
+}
+
+func SymbolMap_AddModule(symmap CSymbolMap, name string, address uint32, size uint32) {
+  nameStr := C.CString(name)
+  defer C.free(unsafe.Pointer(nameStr))
+
+  C.SymbolMap_AddModule(
+    C.BridgeSymbolMap(symmap),
+    nameStr,
+    C.uint32_t(address),
+    C.uint32_t(size),
+  )
+}
+
+func GlobalSetSymbolMap(symmap CSymbolMap) {
+  C.GlobalSetSymbolMap(C.BridgeSymbolMap(symmap))
+}
+
+//export bridgeGetFuncName
+func bridgeGetFuncName(moduleIndex C.int, funcIndex C.int) *C.char {
+  if g_GetFuncName == nil {
+    fmt.Printf("WARNING:\tg_GetFuncName is nil")
+    return nil
+  }
+  str := g_GetFuncName(int(moduleIndex), int(funcIndex))
+  if str == "" {
+    return nil
+  }
+  return AllocateCString(str)
+}
+
+func GlobalSetGetFuncNameFunc(fn funcGetFuncName) {
+  g_GetFuncName = fn
+  if fn != nil {
+    C.GlobalSetGetFuncNameFunc(C.GetFuncNameFunc(C.bridgeGetFuncName))
+  } else {
+    C.GlobalSetGetFuncNameFunc(nil)
+  }
+}
+
+func MemoryIsValidAddress(address uint32) bool {
+  return C.MemoryIsValidAddress(C.uint32_t(address)) == 1
+}
+
+func MIPSAnalystGetOpcodeInfo(address uint32) *models.MipsOpcode {
+  opcode := C.MIPSAnalystGetOpcodeInfo(C.uint32_t(address))
+
+  return &models.MipsOpcode{
+    Address: uint32(opcode.opcodeAddress),
+    Encoded: uint32(opcode.encodedOpcode),
+
+    IsConditional:      opcode.isConditional ==  1,
+    IsConditionMet:     opcode.conditionMet == 1,
+    IsBranch:           opcode.isBranch == 1,
+    IsLinkedBranch:     opcode.isLinkedBranch == 1,
+    IsLikelyBranch:     opcode.isLikelyBranch == 1,
+    IsBranchToRegister: opcode.isBranchToRegister == 1,
+    HasDelaySlot:       opcode.hasDelaySlot == 1,
+    IsDataAccess:       opcode.isDataAccess == 1,
+    HasRelevantAddress: opcode.hasRelevantAddress == 1,
+
+    BranchTarget:       uint32(opcode.branchTarget),
+    BranchRegister:     int(opcode.branchRegisterNum),
+    DataSize:           int(opcode.dataSize),
+    DataAddress:        uint32(opcode.dataAddress),
+    RelevantAddress:    uint32(opcode.relevantAddress),
+
+    Dizz: C.GoString(&opcode.dizz[0]),
+    Log:  C.GoString(&opcode.log[0]),
+  }
+}
+
