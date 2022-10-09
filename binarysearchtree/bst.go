@@ -3,6 +3,8 @@ package binarysearchtree
 import (
 	"fmt"
 	"sync"
+
+	"golang.org/x/exp/constraints"
 )
 
 // Node a single node that composes the tree
@@ -12,6 +14,7 @@ type Node[T any] struct {
 	left  *Node[T] //left
 	right *Node[T] //right
 	parent *Node[T] // up
+	height int
 }
 
 type Iterator[T any] struct {
@@ -53,31 +56,23 @@ type ItemBinarySearchTree[T any] struct {
 func (bst *ItemBinarySearchTree[T]) Insert(key int, value T) {
 	bst.lock.Lock()
 	defer bst.lock.Unlock()
-	n := &Node[T]{key, value, nil, nil, nil}
-	if bst.root == nil {
-			bst.root = n
-	} else {
-			insertNode(bst.root, n)
-	}
+
+	bst.root = insertNode(bst.root, key, value)
 }
 
 // internal function to find the correct place for a node in a tree
-func insertNode[T any](node, newNode *Node[T]) {
-	if newNode.key < node.key {
-			if node.left == nil {
-					node.left = newNode
-					newNode.parent = node
-			} else {
-					insertNode(node.left, newNode)
-			}
+func insertNode[T any](node *Node[T], key int, value T) *Node[T] {
+	if node == nil {
+		return &Node[T]{key, value, nil, nil, nil, 1}
+	} else if key < node.key {
+		node.left = insertNode(node.left, key, value)
+		node.left.parent = node
 	} else {
-			if node.right == nil {
-					node.right = newNode
-					newNode.parent = node
-			} else {
-					insertNode(node.right, newNode)
-			}
+		node.right = insertNode(node.right, key, value)
+		node.right.parent = node
 	}
+
+	return rebalanceTreeAfterInsert(node, key)
 }
 
 // InOrderTraverse visits all nodes with in-order traversing
@@ -145,16 +140,16 @@ func (bst *ItemBinarySearchTree[T]) Min() *T {
 }
 
 // Max returns the Item with max value stored in the tree
-func (bst *ItemBinarySearchTree[T]) Max() *T {
+func (bst *ItemBinarySearchTree[T]) Max() Iterator[T] {
 	bst.lock.RLock()
 	defer bst.lock.RUnlock()
 	n := bst.root
 	if n == nil {
-			return nil
+			return Iterator[T]{nil}
 	}
 	for {
 			if n.right == nil {
-					return &n.value
+					return Iterator[T]{n}
 			}
 			n = n.right
 	}
@@ -174,11 +169,12 @@ func search[T any](n *Node[T], key int) *Node[T] {
 	if n == nil {
 			return nil
 	}
-	if key < n.key {
-			return search(n.left, key)
-	}
-	if key > n.key {
-			return search(n.right, key)
+	for n != nil && key != n.key {
+		if key < n.key {
+			n = n.left
+		} else if key > n.key {
+			n = n.right
+		}
 	}
 	return n
 }
@@ -187,50 +183,57 @@ func search[T any](n *Node[T], key int) *Node[T] {
 func (bst *ItemBinarySearchTree[T]) Remove(key int) {
 	bst.lock.Lock()
 	defer bst.lock.Unlock()
-	remove(bst.root, key)
+
+	bst.root = remove(bst.root, key)
 }
 
 // internal recursive function to remove an item
 func remove[T any](node *Node[T], key int) *Node[T] {
 	if node == nil {
 			return nil
-	}
-	if key < node.key {
+	} else if key < node.key {
 			node.left = remove(node.left, key)
-			node.left.parent = node
-			return node
-	}
-	if key > node.key {
-			node.right = remove(node.right, key)
-			node.right.parent = node
-			return node
-	}
-	// key == node.key
-	if node.left == nil && node.right == nil {
-			node = nil
-			return nil
-	}
-	if node.left == nil {
-			node = node.right
-			return node
-	}
-	if node.right == nil {
-			node = node.left
-			return node
-	}
-	leftmostrightside := node.right
-	for {
-			//find smallest value on the right side
-			if leftmostrightside != nil && leftmostrightside.left != nil {
-					leftmostrightside = leftmostrightside.left
-			} else {
-					break
+			if node.left != nil {
+				node.left.parent = node
 			}
+	} else if key > node.key {
+			node.right = remove(node.right, key)
+			if node.right != nil {
+				node.right.parent = node
+			}
+	} else  {
+		// key == node.key
+		//if node.left == nil && node.right == nil {
+		//		node = nil
+		//		return nil
+		//} else
+		if node.left == nil {
+				parent := node.parent
+				node = node.right
+				if node != nil {
+					node.parent = parent
+				}
+				return node
+		} else
+		if node.right == nil {
+				parent := node.parent
+				node = node.left
+				if node != nil {
+					node.parent = parent
+				}
+				return node
+		} else {
+			leftmostrightside := findSmallest(node.right)
+			node.key, node.value = leftmostrightside.key, leftmostrightside.value
+
+			node.right = remove(node.right, node.key)
+			if node.right != nil {
+				node.right.parent = node
+			}
+		}
 	}
-	node.key, node.value = leftmostrightside.key, leftmostrightside.value
-	node.right = remove(node.right, node.key)
-	node.right.parent = node
-	return node
+
+	return rebalanceTreeAfterRemove(node)
 }
 
 // String prints a visual representation of the tree
@@ -252,7 +255,11 @@ func stringify[T any](n *Node[T], level int) {
 		format += "---[ "
 		level++
 		stringify(n.left, level)
-		fmt.Printf(format+"%d\n", n.key)
+		p := ""
+		if n.parent != nil {
+			p = fmt.Sprintf("%d",n.parent.key)
+		}
+		fmt.Printf(format+"%d (%s)\n", n.key, p)
 		stringify(n.right, level)
 	}
 }
@@ -271,19 +278,24 @@ func lowerBound[T any](n *Node[T], key int) *Node[T] {
 	if n == nil {
 		return nil
 	}
-	if key < n.key {
-		if n.left == nil {
-			return n
+	for n != nil && n.key != key {
+		if key < n.key {
+			if n.left == nil || key > n.left.key {
+				return n
+			}
+			n = n.left
+		} else if key > n.key {
+			n = n.right
 		}
-		return lowerBound(n.left, key)
-	}
-	if key > n.key {
-		return lowerBound(n.right, key)
 	}
 	return n
 }
 
 func getPrevNode[T any](node *Node[T]) *Node[T] {
+	if node == nil {
+		return nil
+	}
+
 	if node.left != nil {
 		node = node.left
 		for node.right != nil {
@@ -301,6 +313,10 @@ func getPrevNode[T any](node *Node[T]) *Node[T] {
 }
 
 func getNextNode[T any](node *Node[T]) *Node[T] {
+	if node == nil {
+		return nil
+	}
+
 	if node.right != nil {
 		node = node.right
 		for node.left != nil {
@@ -315,4 +331,140 @@ func getNextNode[T any](node *Node[T]) *Node[T] {
 		parent = parent.parent
 	}
 	return parent
+}
+
+func getHeight[T any](n *Node[T]) int{
+	if n == nil {
+		return 0
+	}
+	return n.height
+}
+
+func max[T constraints.Ordered](a, b T) T {
+	if a > b {
+		return a
+	}
+	return b
+}
+
+func recalculateHeight[T any](node *Node[T]) {
+	node.height = 1 + max(getHeight(node.left), getHeight(node.right))
+}
+
+func getBalanceFactor[T any](node *Node[T]) int {
+	if node == nil {
+		return 0
+	}
+	return getHeight(node.left) - getHeight(node.right)
+}
+
+func findSmallest[T any](n *Node[T]) *Node[T] {
+	leftmostrightside := n
+	for {
+			if leftmostrightside != nil && leftmostrightside.left != nil {
+					leftmostrightside = leftmostrightside.left
+			} else {
+					break
+			}
+	}
+	return leftmostrightside
+}
+
+func rebalanceTreeAfterInsert[T any](node *Node[T], key int) *Node[T] {
+	if node == nil {
+		return node
+	}
+	recalculateHeight(node)
+
+	// check balance factor and rotateLeft if right-heavy and rotateRight if left-heavy
+	balanceFactor := getBalanceFactor(node)
+	if balanceFactor > 1 {
+		// check if child is right-heavy and rotateLeft first
+		if key < node.left.key {
+			return rotateRight(node)
+		} else {
+			node.left = rotateLeft(node.left)
+			return rotateRight(node)
+		}
+	}
+
+	if balanceFactor < -1 {
+		// check if child is left-heavy and rotateRight first
+		if key > node.right.key {
+			return rotateLeft(node)
+		} else {
+			node.right = rotateRight(node.right)
+			return rotateLeft(node)
+		}
+	}
+	return node
+}
+
+func rebalanceTreeAfterRemove[T any](node *Node[T]) *Node[T] {
+	if node == nil {
+		return node
+	}
+	recalculateHeight(node)
+
+	// check balance factor and rotateLeft if right-heavy and rotateRight if left-heavy
+	balanceFactor := getBalanceFactor(node)
+
+	if balanceFactor > 1 {
+		// check if child is right-heavy and rotateLeft first
+		if getBalanceFactor(node.left) >= 0 {
+			return rotateRight(node)
+		} else {
+			node.left = rotateLeft(node.left)
+			return rotateRight(node)
+		}
+	}
+
+	if balanceFactor < -1 {
+		// check if child is left-heavy and rotateRight first
+		if getBalanceFactor(node.right) <= 0 {
+			return rotateLeft(node)
+		} else {
+			node.right = rotateRight(node.right)
+			return rotateLeft(node)
+		}
+	}
+
+	return node
+}
+
+
+func rotateLeft[T any](n *Node[T]) *Node[T] {
+	newRoot := n.right
+
+	n.right = newRoot.left
+	if n.right.parent != nil {
+		n.right.parent = n
+	}
+
+	newRoot.left = n
+	newRoot.parent = n.parent
+
+	n.parent = newRoot
+
+	recalculateHeight(n)
+	recalculateHeight(newRoot)
+	return newRoot
+}
+
+func rotateRight[T any](n *Node[T]) *Node[T] {
+	newRoot := n.left
+
+	n.left = newRoot.right
+	if n.left != nil {
+		n.left.parent = n
+	}
+
+	newRoot.right = n
+	newRoot.parent = n.parent
+
+	n.parent = newRoot
+
+	recalculateHeight(n)
+	recalculateHeight(newRoot)
+	return newRoot
 }

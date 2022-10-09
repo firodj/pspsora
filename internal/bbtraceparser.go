@@ -256,7 +256,7 @@ func (bbtrace *BBTraceParser) SetCurrentThreadPC(id uint16, pc uint32) uint32 {
 func (bbtrace *BBTraceParser) ParsingBB(param BBTraceParam) error {
 	last_pc := bbtrace.SetCurrentThreadPC(param.ID, param.PC)
 
-	fmt.Printf("#%d {0x%08x, 0x%08x}\n", param.Nts, param.PC, param, last_pc)
+	fmt.Printf("#%d {0x%08x, 0x%08x}\n", param.Nts, param.PC, last_pc)
 
 	if last_pc == 0 {
 		// Usually start thread doesn't have last_pc
@@ -272,4 +272,5 @@ func (bbtrace *BBTraceParser) ParsingBB(param BBTraceParam) error {
 
 func (bbtrace *BBTraceParser) EnsureBB(bb_addr uint32) (*SoraBasicBlock, error) {
 	bb := bbtrace.doc.GetBB(bb_addr)
+	return bb, nil
 }

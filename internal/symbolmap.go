@@ -1,6 +1,6 @@
 package internal
 
-import "github.com/firodj/ppsspp/disasm/pspdisasm/bridge"
+import "github.com/firodj/pspsora/bridge"
 
 type SymbolMap struct {
 	ptr bridge.CSymbolMap

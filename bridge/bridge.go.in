@@ -13,7 +13,7 @@ import (
 	"sync"
 	"unsafe"
 
-  "github.com/firodj/ppsspp/disasm/pspdisasm/models"
+  "github.com/firodj/pspsora/models"
 )
 
 type CSymbolMap C.BridgeSymbolMap

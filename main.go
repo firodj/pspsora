@@ -5,7 +5,7 @@ import (
 	"os"
 	"runtime"
 
-	"github.com/firodj/ppsspp/disasm/pspdisasm/internal"
+	"github.com/firodj/pspsora/internal"
 )
 
 func main() {

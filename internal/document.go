@@ -8,9 +8,9 @@ import (
 
 	"gopkg.in/yaml.v3"
 
-	"github.com/firodj/ppsspp/disasm/pspdisasm/binarysearchtree"
-	"github.com/firodj/ppsspp/disasm/pspdisasm/bridge"
-	"github.com/firodj/ppsspp/disasm/pspdisasm/models"
+	"github.com/firodj/pspsora/binarysearchtree"
+	"github.com/firodj/pspsora/bridge"
+	"github.com/firodj/pspsora/models"
 )
 
 
@@ -71,7 +71,7 @@ type PSPMemory struct {
 }
 
 type SoraBasicBlock struct {
-	Adress        uint32 `yaml:"address"`
+	Address       uint32 `yaml:"address"`
 	LastAddress   uint32 `yaml:"last_address"`
 	BranchAddress uint32 `yaml:"branch_address"`
 }
@@ -287,12 +287,30 @@ func (doc *SoraDocument) GetFunctionByIndex(idx int) *SoraFunction {
 	return &doc.analyzed.Functions[idx]
 }
 
-func (doc *SoraDocument) GetBB(bb_addr uint32) *SoraBasicBlock {
-	if bb_addr == 0 {
+func (doc *SoraDocument) GetBB(addr uint32) *SoraBasicBlock {
+	if addr == 0 {
 		return nil
 	}
 
+	var bb *SoraBasicBlock
+	it := doc.basicBlocks.LowerBound(int(addr))
+	if !it.End() {
+		bb = it.Value()
 
+		if addr != bb.Address {
+			it := it.Prev()
+			if !it.End() {
+				bb = it.Value()
+			} else {
+				bb = nil
+			}
+		}
+	} else {
+		//it = doc.basicBlocks.Max()
+		if !it.End() {
+			bb = it.Value()
+		}
+	}
 
 	return nil
 }

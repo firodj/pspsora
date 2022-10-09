@@ -3,7 +3,7 @@ package internal
 import (
 	"fmt"
 
-	"github.com/firodj/ppsspp/disasm/pspdisasm/models"
+	"github.com/firodj/pspsora/models"
 )
 
 type BBYieldFunc func(state BBAnalState)

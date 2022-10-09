@@ -3,7 +3,7 @@ package internal
 import (
 	"fmt"
 
-	"github.com/firodj/ppsspp/disasm/pspdisasm/models"
+	"github.com/firodj/pspsora/models"
 )
 
 // generics Queue
@@ -52,7 +52,7 @@ func (anal *FunctionAnalyzer) Process() {
 	bb_visits := make(map[uint32]*BBVisit)
 	for _, bb_addr := range fun.BBAddresses {
 		bb_visits[bb_addr] = &BBVisit{
-			BB: anal.doc.BBGet(bb_addr),
+			BB: anal.doc.GetBB(bb_addr),
 			Visited: false,
 		}
 	}

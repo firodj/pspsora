@@ -8,10 +8,11 @@ import (
 
 type BSTStringTestSuite struct {
     suite.Suite
-    bst ItemBinarySearchTree[string]
+    bst *ItemBinarySearchTree[string]
 }
 
 func (st *BSTStringTestSuite) SetupTest() {
+    st.bst = new(ItemBinarySearchTree[string])
     st.bst.Insert(8, "8")
     st.bst.Insert(4, "4")
     st.bst.Insert(10, "10")
@@ -26,7 +27,7 @@ func (st *BSTStringTestSuite) SetupTest() {
 
 // In order for 'go test' to run this suite, we need to create
 // a normal test function and pass our suite to suite.Run
-func (st *BSTStringTestSuite) TestBSTStringTestSuite(t *testing.T) {
+func TestBSTStringTestSuite(t *testing.T) {
     suite.Run(t, new(BSTStringTestSuite))
 }
 
@@ -42,7 +43,7 @@ func (st *BSTStringTestSuite) TestInOrderTraverse() {
     st.bst.InOrderTraverse(func(i string) {
         result = append(result, i)
     })
-    st.Equalf([]string{"1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11"}, result, "Traversal order incorrect, got %v", result)
+    st.Equalf([]string{"1", "2", "3", "4", "5", "6", "7", "8", "9", "10"}, result, "Traversal order incorrect, got %v", result)
 }
 
 func (st *BSTStringTestSuite) TestPreOrderTraverse() {
@@ -50,7 +51,7 @@ func (st *BSTStringTestSuite) TestPreOrderTraverse() {
     st.bst.PreOrderTraverse(func(i string) {
         result = append(result, i)
     })
-    st.Equalf([]string{"8", "4", "2", "1", "3", "6", "5", "7", "10", "9", "11"}, result, "Traversal order incorrect, got %v instead of %v", result, []string{"8", "4", "2", "1", "3", "6", "5", "7", "10", "9", "11"})
+    st.Equalf([]string{"4", "2", "1", "3", "8", "6", "5", "7", "10", "9"}, result, "Traversal order incorrect, got %v instead of %v", result, []string{"8", "4", "2", "1", "3", "6", "5", "7", "10", "9", "11"})
 }
 
 func (st *BSTStringTestSuite) TestPostOrderTraverse() {
@@ -58,7 +59,7 @@ func (st *BSTStringTestSuite) TestPostOrderTraverse() {
     st.bst.PostOrderTraverse(func(i string) {
         result = append(result, i)
     })
-    st.Equalf([]string{"1", "3", "2", "5", "7", "6", "4", "9", "11", "10", "8"}, result, "Traversal order incorrect, got %v instead of %v", result, []string{"1", "3", "2", "5", "7", "6", "4", "9", "11", "10", "8"})
+    st.Equalf([]string{"1", "3", "2", "5", "7", "6", "9", "10", "8", "4"}, result, "Traversal order incorrect, got %v instead of %v", result, []string{"1", "3", "2", "5", "7", "6", "4", "9", "11", "10", "8"})
 }
 
 func (st *BSTStringTestSuite) TestMin() {
@@ -69,8 +70,8 @@ func (st *BSTStringTestSuite) TestMin() {
 
 func (st *BSTStringTestSuite) TestMax() {
     max := st.bst.Max()
-    st.NotNil(max, "max not working")
-    st.Equalf("11", *max, "max should be 11")
+    st.False(max.End(), "max not working")
+    st.Equalf("10", max.Value(), "max should be 10")
 }
 
 func (st *BSTStringTestSuite) TestSearch() {
@@ -83,8 +84,7 @@ func (st *BSTStringTestSuite) TestSearch() {
     st.Equal(8, it.Key())
 
     it = st.bst.Search(11)
-    st.False(it.End())
-    st.Equal(11, it.Key())
+    st.True(it.End())
 }
 
 func (st *BSTStringTestSuite) TestRemove() {
@@ -93,6 +93,8 @@ func (st *BSTStringTestSuite) TestRemove() {
     min := st.bst.Min()
     st.NotNil(min, "min not working")
     st.Equalf("2", *min, "min should be 2")
+
+    st.bst.String()
 }
 
 func (st *BSTStringTestSuite) TestLowerBound() {
@@ -100,12 +102,14 @@ func (st *BSTStringTestSuite) TestLowerBound() {
     st.bst.Remove(1)
     st.bst.Insert(15, "15")
 
+    st.bst.String()
+
     it := st.bst.LowerBound(1)
     st.False(it.End())
     st.Equal(2, it.Key())
 
-    it = it.Prev()
-    st.True(it.End())
+    it2 := it.Prev()
+    st.True(it2.End())
 
     it = it.Next()
     st.False(it.End())
