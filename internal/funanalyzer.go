@@ -52,7 +52,7 @@ func (anal *FunctionAnalyzer) Process() {
 	bb_visits := make(map[uint32]*BBVisit)
 	for _, bb_addr := range fun.BBAddresses {
 		bb_visits[bb_addr] = &BBVisit{
-			BB: anal.doc.GetBB(bb_addr),
+			BB: anal.doc.BBManager.Get(bb_addr),
 			Visited: false,
 		}
 	}

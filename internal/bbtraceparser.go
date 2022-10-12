@@ -271,6 +271,6 @@ func (bbtrace *BBTraceParser) ParsingBB(param BBTraceParam) error {
 }
 
 func (bbtrace *BBTraceParser) EnsureBB(bb_addr uint32) (*SoraBasicBlock, error) {
-	bb := bbtrace.doc.GetBB(bb_addr)
+	bb := bbtrace.doc.BBManager.Get(bb_addr)
 	return bb, nil
 }

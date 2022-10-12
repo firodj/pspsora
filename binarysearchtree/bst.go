@@ -436,7 +436,7 @@ func rotateLeft[K constraints.Ordered, T any](n *Node[K,T]) *Node[K,T] {
 	newRoot := n.right
 
 	n.right = newRoot.left
-	if n.right.parent != nil {
+	if n.right != nil {
 		n.right.parent = n
 	}
 

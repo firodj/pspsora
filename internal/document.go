@@ -8,12 +8,9 @@ import (
 
 	"gopkg.in/yaml.v3"
 
-	"github.com/firodj/pspsora/binarysearchtree"
 	"github.com/firodj/pspsora/bridge"
 	"github.com/firodj/pspsora/models"
 )
-
-
 type PSPSegment struct {
 	Addr uint32 `yaml:"addr"`
 	Size int    `yaml:"size"`
@@ -95,19 +92,13 @@ type SoraYaml struct {
 	HLEModules    []PSPHLEModule    `yaml:"hle_modules"`
 }
 
-// TODO: will move to other persist storage
-type SoraAnalyzed struct {
-	BasicBlocks    []SoraBasicBlock `yaml:"basic_blocks"`
-	BasicBlockRefs []SoraBBRef      `yaml:"basic_block_refs"`
-	Functions      []SoraFunction   `yaml:"functions"`
-}
-
 type SoraDocument struct {
 	yaml     SoraYaml
-	analyzed SoraAnalyzed
+
 	// HLEModules (yaml)
-	bbtraceparser *BBTraceParser
-	basicBlocks binarysearchtree.ItemBinarySearchTree[*SoraBasicBlock]
+	bbtraceparser  *BBTraceParser
+	BBManager      *BasicBlockManager
+	functions      []SoraFunction
 
 	// MemoryDump
 	buf      unsafe.Pointer
@@ -152,7 +143,6 @@ func NewSoraDocument(path string, load_analyzed bool) (*SoraDocument, error) {
 	main_yaml := filepath.Join(path, "Sora.yaml")
 	main_data := filepath.Join(path, "SoraMemory.bin")
 	bb_data   := filepath.Join(path, "SoraBBTrace.rec")
-	//anal_yaml := filepath.Join(path, "SoraAnalyzed.yaml")
 
 	doc := &SoraDocument{
 		symmap: CreateSymbolMap(),
@@ -162,6 +152,7 @@ func NewSoraDocument(path string, load_analyzed bool) (*SoraDocument, error) {
 	bridge.GlobalSetSymbolMap(doc.symmap.ptr)
 	bridge.GlobalSetGetFuncNameFunc(doc.GetHLEFuncName)
 	doc.bbtraceparser = NewBBTraceParser(doc, bb_data)
+	doc.BBManager = NewBasicBlockManager(doc)
 
 	err := doc.LoadYaml(main_yaml)
 	if err != nil {
@@ -224,15 +215,15 @@ func (doc *SoraDocument) CreateNewFunction(addr uint32, size uint32) int {
 		*name = fmt.Sprintf("z_un_%08x", addr)
 	}
 
-	idx := len(doc.analyzed.Functions)
+	idx := len(doc.functions)
 
-	doc.analyzed.Functions = append(doc.analyzed.Functions, SoraFunction{
+	doc.functions = append(doc.functions, SoraFunction{
 		Address: addr,
 		Name: *name,
 		Size: size,
 	})
 
-	fun := &doc.analyzed.Functions[idx]
+	fun := &doc.functions[idx]
 
   doc.symmap.AddFunction(fun.Name, fun.Address, fun.Size, -1)
 
@@ -275,44 +266,16 @@ func (doc *SoraDocument) Disasm(address uint32) *models.MipsOpcode {
 
 func (doc *SoraDocument) GetFunctionByAddress(address uint32) (int, *SoraFunction)  {
 	if idx, ok := doc.mapAddrToFunc[address]; ok {
-		return idx, &doc.analyzed.Functions[idx]
+		return idx, &doc.functions[idx]
 	}
 	return -1, nil
 }
 
 func (doc *SoraDocument) GetFunctionByIndex(idx int) *SoraFunction {
-	if idx < 0 || idx >= len(doc.analyzed.Functions) {
+	if idx < 0 || idx >= len(doc.functions) {
 		return nil
 	}
-	return &doc.analyzed.Functions[idx]
-}
-
-func (doc *SoraDocument) GetBB(addr uint32) *SoraBasicBlock {
-	if addr == 0 {
-		return nil
-	}
-
-	var bb *SoraBasicBlock
-	it := doc.basicBlocks.LowerBound(int(addr))
-	if !it.End() {
-		bb = it.Value()
-
-		if addr != bb.Address {
-			it := it.Prev()
-			if !it.End() {
-				bb = it.Value()
-			} else {
-				bb = nil
-			}
-		}
-	} else {
-		//it = doc.basicBlocks.Max()
-		if !it.End() {
-			bb = it.Value()
-		}
-	}
-
-	return nil
+	return &doc.functions[idx]
 }
 
 func (doc *SoraDocument) Parser() *BBTraceParser {
