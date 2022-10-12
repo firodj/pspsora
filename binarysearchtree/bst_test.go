@@ -8,11 +8,11 @@ import (
 
 type BSTStringTestSuite struct {
     suite.Suite
-    bst *ItemBinarySearchTree[string]
+    bst *AVLTree[int,string]
 }
 
 func (st *BSTStringTestSuite) SetupTest() {
-    st.bst = new(ItemBinarySearchTree[string])
+    st.bst = new(AVLTree[int,string])
     st.bst.Insert(8, "8")
     st.bst.Insert(4, "4")
     st.bst.Insert(10, "10")

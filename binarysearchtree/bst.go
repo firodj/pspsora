@@ -8,52 +8,51 @@ import (
 )
 
 // Node a single node that composes the tree
-type Node[T any] struct {
-	key   int
+type Node[K constraints.Ordered, T any] struct {
+	key   K
 	value T
-	left  *Node[T] //left
-	right *Node[T] //right
-	parent *Node[T] // up
+	left  *Node[K,T] //left
+	right *Node[K,T] //right
+	parent *Node[K,T] // up
 	height int
 }
 
-type Iterator[T any] struct {
-	n *Node[T]
-	// bst *ItemBinarySearchTree[T]
+type Iterator[K constraints.Ordered,T any] struct {
+	n *Node[K,T]
 }
 
-func (it *Iterator[T]) Value() T {
+func (it *Iterator[K,T]) Value() T {
 	return it.n.value
 }
 
-func (it *Iterator[T]) Key() int {
+func (it *Iterator[K,T]) Key() K {
 	return it.n.key
 }
 
-func (it *Iterator[T]) End() bool {
+func (it *Iterator[K,T]) End() bool {
 	return it.n == nil
 }
 
-func (it *Iterator[T]) Prev() Iterator[T] {
-	return Iterator[T] {
+func (it *Iterator[K,T]) Prev() Iterator[K,T] {
+	return Iterator[K,T] {
 		n: getPrevNode(it.n),
 	}
 }
 
-func (it *Iterator[T]) Next() Iterator[T] {
-	return Iterator[T] {
+func (it *Iterator[K,T]) Next() Iterator[K,T] {
+	return Iterator[K,T] {
 		n: getNextNode(it.n),
 	}
 }
 
-// ItemBinarySearchTree the binary search tree of Items
-type ItemBinarySearchTree[T any] struct {
-	root *Node[T]
+// AVLTree the binary search tree of Items
+type AVLTree[K constraints.Ordered,T any] struct {
+	root *Node[K,  T]
 	lock sync.RWMutex
 }
 
 // Insert inserts the Item t in the tree
-func (bst *ItemBinarySearchTree[T]) Insert(key int, value T) {
+func (bst *AVLTree[K,T]) Insert(key K, value T) {
 	bst.lock.Lock()
 	defer bst.lock.Unlock()
 
@@ -61,9 +60,9 @@ func (bst *ItemBinarySearchTree[T]) Insert(key int, value T) {
 }
 
 // internal function to find the correct place for a node in a tree
-func insertNode[T any](node *Node[T], key int, value T) *Node[T] {
+func insertNode[K constraints.Ordered,T any](node *Node[K,T], key K, value T) *Node[K,T] {
 	if node == nil {
-		return &Node[T]{key, value, nil, nil, nil, 1}
+		return &Node[K,T]{key, value, nil, nil, nil, 1}
 	} else if key < node.key {
 		node.left = insertNode(node.left, key, value)
 		node.left.parent = node
@@ -76,14 +75,14 @@ func insertNode[T any](node *Node[T], key int, value T) *Node[T] {
 }
 
 // InOrderTraverse visits all nodes with in-order traversing
-func (bst *ItemBinarySearchTree[T]) InOrderTraverse(f func(T)) {
+func (bst *AVLTree[K,T]) InOrderTraverse(f func(T)) {
 	bst.lock.RLock()
 	defer bst.lock.RUnlock()
 	inOrderTraverse(bst.root, f)
 }
 
 // internal recursive function to traverse in order
-func inOrderTraverse[T any](n *Node[T], f func(T)) {
+func inOrderTraverse[K constraints.Ordered, T any](n *Node[K,T], f func(T)) {
 	if n != nil {
 			inOrderTraverse(n.left, f)
 			f(n.value)
@@ -92,14 +91,14 @@ func inOrderTraverse[T any](n *Node[T], f func(T)) {
 }
 
 // PreOrderTraverse visits all nodes with pre-order traversing
-func (bst *ItemBinarySearchTree[T]) PreOrderTraverse(f func(T)) {
+func (bst *AVLTree[K,T]) PreOrderTraverse(f func(T)) {
 	bst.lock.Lock()
 	defer bst.lock.Unlock()
 	preOrderTraverse(bst.root, f)
 }
 
 // internal recursive function to traverse pre order
-func preOrderTraverse[T any](n *Node[T], f func(T)) {
+func preOrderTraverse[K constraints.Ordered, T any](n *Node[K,T], f func(T)) {
 	if n != nil {
 			f(n.value)
 			preOrderTraverse(n.left, f)
@@ -108,14 +107,14 @@ func preOrderTraverse[T any](n *Node[T], f func(T)) {
 }
 
 // PostOrderTraverse visits all nodes with post-order traversing
-func (bst *ItemBinarySearchTree[T]) PostOrderTraverse(f func(T)) {
+func (bst *AVLTree[K,T]) PostOrderTraverse(f func(T)) {
 	bst.lock.Lock()
 	defer bst.lock.Unlock()
 	postOrderTraverse(bst.root, f)
 }
 
 // internal recursive function to traverse post order
-func postOrderTraverse[T any](n *Node[T], f func(T)) {
+func postOrderTraverse[K constraints.Ordered,T any](n *Node[K,T], f func(T)) {
 	if n != nil {
 			postOrderTraverse(n.left, f)
 			postOrderTraverse(n.right, f)
@@ -124,7 +123,7 @@ func postOrderTraverse[T any](n *Node[T], f func(T)) {
 }
 
 // Min returns the Item with min value stored in the tree
-func (bst *ItemBinarySearchTree[T]) Min() *T {
+func (bst *AVLTree[K,T]) Min() *T {
 	bst.lock.RLock()
 	defer bst.lock.RUnlock()
 	n := bst.root
@@ -140,32 +139,32 @@ func (bst *ItemBinarySearchTree[T]) Min() *T {
 }
 
 // Max returns the Item with max value stored in the tree
-func (bst *ItemBinarySearchTree[T]) Max() Iterator[T] {
+func (bst *AVLTree[K,T]) Max() Iterator[K,T] {
 	bst.lock.RLock()
 	defer bst.lock.RUnlock()
 	n := bst.root
 	if n == nil {
-			return Iterator[T]{nil}
+			return Iterator[K,T]{nil}
 	}
 	for {
 			if n.right == nil {
-					return Iterator[T]{n}
+					return Iterator[K,T]{n}
 			}
 			n = n.right
 	}
 }
 
 // Search returns true if the Item t exists in the tree
-func (bst *ItemBinarySearchTree[T]) Search(key int) Iterator[T] {
+func (bst *AVLTree[K,T]) Search(key K) Iterator[K,T] {
 	bst.lock.RLock()
 	defer bst.lock.RUnlock()
-	return Iterator[T] {
+	return Iterator[K,T] {
 		n: search(bst.root, key),
 	}
 }
 
 // internal recursive function to search an item in the tree
-func search[T any](n *Node[T], key int) *Node[T] {
+func search[K constraints.Ordered,T any](n *Node[K,T], key K) *Node[K,T] {
 	if n == nil {
 			return nil
 	}
@@ -180,7 +179,7 @@ func search[T any](n *Node[T], key int) *Node[T] {
 }
 
 // Remove removes the Item with key `key` from the tree
-func (bst *ItemBinarySearchTree[T]) Remove(key int) {
+func (bst *AVLTree[K,T]) Remove(key K) {
 	bst.lock.Lock()
 	defer bst.lock.Unlock()
 
@@ -188,7 +187,7 @@ func (bst *ItemBinarySearchTree[T]) Remove(key int) {
 }
 
 // internal recursive function to remove an item
-func remove[T any](node *Node[T], key int) *Node[T] {
+func remove[K constraints.Ordered,T any](node *Node[K,T], key K) *Node[K,T] {
 	if node == nil {
 			return nil
 	} else if key < node.key {
@@ -237,7 +236,7 @@ func remove[T any](node *Node[T], key int) *Node[T] {
 }
 
 // String prints a visual representation of the tree
-func (bst *ItemBinarySearchTree[T]) String() {
+func (bst *AVLTree[K,T]) String() {
 	bst.lock.Lock()
 	defer bst.lock.Unlock()
 	fmt.Println("------------------------------------------------")
@@ -246,7 +245,7 @@ func (bst *ItemBinarySearchTree[T]) String() {
 }
 
 // internal recursive function to print a tree
-func stringify[T any](n *Node[T], level int) {
+func stringify[K constraints.Ordered,T any](n *Node[K,T], level int) {
 	if n != nil {
 		format := ""
 		for i := 0; i < level; i++ {
@@ -257,24 +256,24 @@ func stringify[T any](n *Node[T], level int) {
 		stringify(n.left, level)
 		p := ""
 		if n.parent != nil {
-			p = fmt.Sprintf("%d",n.parent.key)
+			p = fmt.Sprintf("%v", n.parent.key)
 		}
 		fmt.Printf(format+"%d (%s)\n", n.key, p)
 		stringify(n.right, level)
 	}
 }
 
-func (bst *ItemBinarySearchTree[T]) LowerBound(key int) Iterator[T] {
+func (bst *AVLTree[K,T]) LowerBound(key K) Iterator[K,T] {
 	bst.lock.RLock()
 	defer bst.lock.RUnlock()
 
-	return Iterator[T] {
+	return Iterator[K,T] {
 		n: lowerBound(bst.root, key),
 	}
 }
 
 // internal recursive function to lowerBound an item in the tree
-func lowerBound[T any](n *Node[T], key int) *Node[T] {
+func lowerBound[K constraints.Ordered,T any](n *Node[K,T], key K) *Node[K,T] {
 	if n == nil {
 		return nil
 	}
@@ -291,7 +290,7 @@ func lowerBound[T any](n *Node[T], key int) *Node[T] {
 	return n
 }
 
-func getPrevNode[T any](node *Node[T]) *Node[T] {
+func getPrevNode[K constraints.Ordered,T any](node *Node[K,T]) *Node[K,T] {
 	if node == nil {
 		return nil
 	}
@@ -312,7 +311,7 @@ func getPrevNode[T any](node *Node[T]) *Node[T] {
 	return parent
 }
 
-func getNextNode[T any](node *Node[T]) *Node[T] {
+func getNextNode[K constraints.Ordered,T any](node *Node[K,T]) *Node[K,T] {
 	if node == nil {
 		return nil
 	}
@@ -333,7 +332,7 @@ func getNextNode[T any](node *Node[T]) *Node[T] {
 	return parent
 }
 
-func getHeight[T any](n *Node[T]) int{
+func getHeight[K constraints.Ordered, T any](n *Node[K,T]) int{
 	if n == nil {
 		return 0
 	}
@@ -347,18 +346,18 @@ func max[T constraints.Ordered](a, b T) T {
 	return b
 }
 
-func recalculateHeight[T any](node *Node[T]) {
+func recalculateHeight[K constraints.Ordered, T any](node *Node[K,T]) {
 	node.height = 1 + max(getHeight(node.left), getHeight(node.right))
 }
 
-func getBalanceFactor[T any](node *Node[T]) int {
+func getBalanceFactor[K constraints.Ordered,T any](node *Node[K,T]) int {
 	if node == nil {
 		return 0
 	}
 	return getHeight(node.left) - getHeight(node.right)
 }
 
-func findSmallest[T any](n *Node[T]) *Node[T] {
+func findSmallest[K constraints.Ordered, T any](n *Node[K,T]) *Node[K,T] {
 	leftmostrightside := n
 	for {
 			if leftmostrightside != nil && leftmostrightside.left != nil {
@@ -370,7 +369,7 @@ func findSmallest[T any](n *Node[T]) *Node[T] {
 	return leftmostrightside
 }
 
-func rebalanceTreeAfterInsert[T any](node *Node[T], key int) *Node[T] {
+func rebalanceTreeAfterInsert[K constraints.Ordered, T any](node *Node[K,T], key K) *Node[K,T] {
 	if node == nil {
 		return node
 	}
@@ -400,7 +399,7 @@ func rebalanceTreeAfterInsert[T any](node *Node[T], key int) *Node[T] {
 	return node
 }
 
-func rebalanceTreeAfterRemove[T any](node *Node[T]) *Node[T] {
+func rebalanceTreeAfterRemove[K constraints.Ordered, T any](node *Node[K,T]) *Node[K,T] {
 	if node == nil {
 		return node
 	}
@@ -433,7 +432,7 @@ func rebalanceTreeAfterRemove[T any](node *Node[T]) *Node[T] {
 }
 
 
-func rotateLeft[T any](n *Node[T]) *Node[T] {
+func rotateLeft[K constraints.Ordered, T any](n *Node[K,T]) *Node[K,T] {
 	newRoot := n.right
 
 	n.right = newRoot.left
@@ -451,7 +450,7 @@ func rotateLeft[T any](n *Node[T]) *Node[T] {
 	return newRoot
 }
 
-func rotateRight[T any](n *Node[T]) *Node[T] {
+func rotateRight[K constraints.Ordered, T any](n *Node[K,T]) *Node[K,T] {
 	newRoot := n.left
 
 	n.left = newRoot.right
