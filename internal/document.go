@@ -4,12 +4,12 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"unsafe"
 
 	"gopkg.in/yaml.v3"
 
 	"github.com/firodj/pspsora/bridge"
-	"github.com/firodj/pspsora/models"
 )
 type PSPSegment struct {
 	Addr uint32 `yaml:"addr"`
@@ -67,23 +67,6 @@ type PSPMemory struct {
 	Size  int    `yaml:"size"`
 }
 
-type SoraBasicBlock struct {
-	Address       uint32 `yaml:"address"`
-	LastAddress   uint32 `yaml:"last_address"`
-	BranchAddress uint32 `yaml:"branch_address"`
-}
-
-type SoraBBRef struct {
-	From  uint32 `yaml:"from"`
-	To    uint32 `yaml:"to"`
-	Flags uint32 `yaml:flags"`
-
-	IsDynamic  bool // immediate or by reg/mem/ptr
-	IsAdjacent bool // next/prev
-	IsLinked   bool // call/linked
-	IsVisited  bool // by bbtrace
-}
-
 type SoraYaml struct {
 	Module        PSPModule         `yaml:"module"`
 	Memory        PSPMemory         `yaml:"memory"`
@@ -96,9 +79,10 @@ type SoraDocument struct {
 	yaml     SoraYaml
 
 	// HLEModules (yaml)
-	bbtraceparser  *BBTraceParser
+	Parser  *BBTraceParser
 	BBManager      *BasicBlockManager
-	functions      []SoraFunction
+	FunManager     *FunctionManager
+	InstrManager     *InstructionManager
 
 	// MemoryDump
 	buf      unsafe.Pointer
@@ -106,7 +90,7 @@ type SoraDocument struct {
 	// UseDef Analyzer
 
 	// SymbolMap
-	symmap   *SymbolMap
+	SymMap   *SymbolMap
 
 	mapAddrToFunc map[uint32]int
 	mapNameToFunc map[string][]int
@@ -145,14 +129,16 @@ func NewSoraDocument(path string, load_analyzed bool) (*SoraDocument, error) {
 	bb_data   := filepath.Join(path, "SoraBBTrace.rec")
 
 	doc := &SoraDocument{
-		symmap: CreateSymbolMap(),
+		SymMap: CreateSymbolMap(),
 		mapAddrToFunc: make(map[uint32]int),
 		mapNameToFunc: make(map[string][]int),
 	}
-	bridge.GlobalSetSymbolMap(doc.symmap.ptr)
+	bridge.GlobalSetSymbolMap(doc.SymMap.ptr)
 	bridge.GlobalSetGetFuncNameFunc(doc.GetHLEFuncName)
-	doc.bbtraceparser = NewBBTraceParser(doc, bb_data)
+	doc.Parser = NewBBTraceParser(doc, bb_data)
 	doc.BBManager = NewBasicBlockManager(doc)
+	doc.FunManager = NewFunctionManager(doc)
+	doc.InstrManager = NewInstructionManager(doc)
 
 	err := doc.LoadYaml(main_yaml)
 	if err != nil {
@@ -165,73 +151,17 @@ func NewSoraDocument(path string, load_analyzed bool) (*SoraDocument, error) {
 	}
 
 	for _, modl := range doc.yaml.LoadedModules {
-		doc.symmap.AddModule(modl.Name, modl.Address, uint32(modl.Size))
+		doc.SymMap.AddModule(modl.Name, modl.Address, uint32(modl.Size))
 	}
 
 	for idx := range doc.yaml.SymFunctions {
 		fun := &doc.yaml.SymFunctions[idx]
-		doc.RegisterExistingFunction(fun)
+		doc.FunManager.RegisterExistingFunction(fun)
 	}
 
 	doc.EntryAddr = doc.yaml.Module.NM.EntryAddr
 
 	return doc, err
-}
-
-func (doc *SoraDocument) GetLabelName(addr uint32) *string {
-	return doc.symmap.GetLabelName(addr)
-}
-
-func (doc *SoraDocument) RegisterNameFunction(idx int) {
-	fun := &doc.yaml.SymFunctions[idx]
-
-	if _, ok := doc.mapNameToFunc[fun.Name]; !ok {
-		doc.mapNameToFunc[fun.Name] = make([]int, 0)
-	}
-
-	for _, exidx := range doc.mapNameToFunc[fun.Name] {
-		if exidx == idx {
-			return
-		}
-	}
-
-	doc.mapNameToFunc[fun.Name] = append(doc.mapNameToFunc[fun.Name], idx)
-}
-
-// RegisterExistingFunction got fun from yaml.SymFunctions and store  into analyzed.Functions
-func (doc *SoraDocument) RegisterExistingFunction(fun *SoraFunction)  {
-	doc.symmap.AddFunction(fun.Name, fun.Address, fun.Size, -1)
-	doc.CreateNewFunction(fun.Address, fun.Size)
-}
-
-func (doc *SoraDocument) CreateNewFunction(addr uint32, size uint32) int {
-	if _, ok := doc.mapAddrToFunc[addr]; ok {
-		fmt.Printf("WARNING:\tduplicate address CreateNewFunction addr:0x%08x\n", addr);
-		return -1
-	}
-	name := doc.symmap.GetLabelName(addr)
-	if name == nil {
-		name = new(string)
-		*name = fmt.Sprintf("z_un_%08x", addr)
-	}
-
-	idx := len(doc.functions)
-
-	doc.functions = append(doc.functions, SoraFunction{
-		Address: addr,
-		Name: *name,
-		Size: size,
-	})
-
-	fun := &doc.functions[idx]
-
-  doc.symmap.AddFunction(fun.Name, fun.Address, fun.Size, -1)
-
-	doc.mapAddrToFunc[fun.Address] = idx
-
-	doc.RegisterNameFunction(idx)
-
-	return idx
 }
 
 func (doc *SoraDocument) GetHLEFuncName(moduleIndex int, funcIndex int) string {
@@ -252,32 +182,72 @@ func (doc *SoraDocument) Delete() {
 	bridge.GlobalSetGetFuncNameFunc(nil)
 	bridge.GlobalSetSymbolMap(nil)
 	bridge.GlobalSetMemoryBase(nil, 0)
-	doc.symmap.Delete()
+	doc.SymMap.Delete()
 }
 
-func (doc *SoraDocument) Disasm(address uint32) *models.MipsOpcode {
+func (doc *SoraDocument) Disasm(address uint32) *SoraInstruction {
 	if !bridge.MemoryIsValidAddress(address) {
-		fmt.Println("invalid address")
 		return nil
 	}
-
-	return bridge.MIPSAnalystGetOpcodeInfo(address)
-}
-
-func (doc *SoraDocument) GetFunctionByAddress(address uint32) (int, *SoraFunction)  {
-	if idx, ok := doc.mapAddrToFunc[address]; ok {
-		return idx, &doc.functions[idx]
+	instr := doc.InstrManager.Get(address)
+	if instr != nil {
+		return instr
 	}
-	return -1, nil
+	instr = doc.InstrManager.Create(address, bridge.MIPSAnalystGetOpcodeInfo(address))
+	return instr
 }
 
-func (doc *SoraDocument) GetFunctionByIndex(idx int) *SoraFunction {
-	if idx < 0 || idx >= len(doc.functions) {
-		return nil
+func (doc *SoraDocument) ParseDizz(dizz string) (mnemonic string, arguments []string) {
+	params := strings.Split(dizz, "\t")
+	mnemonic = params[0]
+
+	for _, param := range params[1:] {
+		argz := strings.Split(param, ",")
+		for _, a := range argz {
+			arguments = append(arguments, a)
+		}
 	}
-	return &doc.functions[idx]
+
+	return
 }
 
-func (doc *SoraDocument) Parser() *BBTraceParser {
-	return doc.bbtraceparser
+func (doc *SoraDocument) ProcessBB(start_addr uint32, last_addr uint32, cb BBYieldFunc) int {
+	var bbas BBAnalState
+	bbas.Init()
+	var prevInstr *SoraInstruction = nil
+
+	for addr := start_addr; last_addr == 0 || addr <= last_addr; addr += 4 {
+		bbas.SetBB(addr)
+
+		instr := doc.Disasm(addr)
+
+		bbas.Append(instr)
+
+		if instr.Info.IsBranch {
+			bbas.SetBranch(addr)
+
+			if !instr.Info.HasDelaySlot {
+				fmt.Printf("WARNING:\tunhandled branch without delay shot\n")
+				bbas.Yield(addr, cb)
+
+				if last_addr == 0 && instr.Info.IsConditional {
+					break
+				}
+			}
+		}
+
+		if prevInstr != nil && prevInstr.Info.HasDelaySlot {
+			bbas.Yield(addr, cb)
+
+			if last_addr == 0 && !prevInstr.Info.IsConditional {
+				break
+			}
+		}
+
+		prevInstr = instr
+	}
+
+	bbas.Yield(last_addr, cb)
+
+	return bbas.Count
 }

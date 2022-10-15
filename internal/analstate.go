@@ -2,8 +2,6 @@ package internal
 
 import (
 	"fmt"
-
-	"github.com/firodj/pspsora/models"
 )
 
 type BBYieldFunc func(state BBAnalState)
@@ -12,7 +10,7 @@ type BBAnalState struct {
 	BBAddr uint32
 	BranchAddr uint32
 	LastAddr uint32
-	Lines []models.MipsOpcode
+	Lines []*SoraInstruction
   Count int
 }
 
@@ -40,8 +38,8 @@ func (bbas *BBAnalState) SetBranch(addr uint32) {
 	bbas.BranchAddr = addr
 }
 
-func (bbas *BBAnalState) Append(instr *models.MipsOpcode) {
-	bbas.Lines = append(bbas.Lines, *instr)
+func (bbas *BBAnalState) Append(instr *SoraInstruction) {
+	bbas.Lines = append(bbas.Lines, instr)
 }
 
 func (bbas *BBAnalState) Yield(last_addr uint32, cb BBYieldFunc) {

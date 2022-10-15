@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"io"
 	"os"
+
+	"github.com/davecgh/go-spew/spew"
 )
 
 const (
@@ -17,7 +19,7 @@ const (
 type RefTs int
 
 type BBTraceStackItem struct {
-	Addr uint32
+	Address uint32
 	RA   uint32
 	Fun *SoraFunction
 	// FNTreeNodeID
@@ -27,7 +29,7 @@ type BBTraceThreadState struct {
 	ID uint16
 	PC uint32
 	RegSP int
-	Stack []BBTraceStackItem
+	Stack Queue[*BBTraceStackItem]
 	Executing bool
 	// FlameGraph
 	// FNHierarchy
@@ -258,9 +260,15 @@ func (bbtrace *BBTraceParser) ParsingBB(param BBTraceParam) error {
 
 	fmt.Printf("#%d {0x%08x, 0x%08x}\n", param.Nts, param.PC, last_pc)
 
+	bb, err := bbtrace.EnsureBB(param.PC)
+	if err != nil {
+		return err
+	}
+	spew.Dump(bb)
+
 	if last_pc == 0 {
 		// Usually start thread doesn't have last_pc
-		fmt.Println("TODO: OnEnterFunc bb, 0")
+		// TODO: bbtrace.OnEnterFunc(...)
 		return nil
 	}
 
@@ -271,6 +279,116 @@ func (bbtrace *BBTraceParser) ParsingBB(param BBTraceParam) error {
 }
 
 func (bbtrace *BBTraceParser) EnsureBB(bb_addr uint32) (*SoraBasicBlock, error) {
-	bb := bbtrace.doc.BBManager.Get(bb_addr)
-	return bb, nil
+	theBB := bbtrace.doc.BBManager.Get(bb_addr)
+
+	if theBB == nil  {
+		bbtrace.doc.ProcessBB(bb_addr, 0, bbtrace.OnEachBB)
+		theBB = bbtrace.doc.BBManager.Get(bb_addr)
+
+		if theBB == nil {
+			err := fmt.Errorf("ERROR:\tunable to get BB after creating at: 0x%08x", bb_addr)
+			return nil, err
+		}
+	} else if (theBB.Address != bb_addr) {
+		prevBB, splitBB := bbtrace.doc.BBManager.SplitAt(bb_addr)
+		if prevBB != theBB {
+			err := fmt.Errorf("ERROR:\tunexpected prevBB(0x%08x) != theBB(0x%08x)", prevBB.Address, theBB.Address)
+			return nil, err
+		}
+		theBB = splitBB
+		fmt.Printf("INFO:\tsplit bb at 0x%08x\n", splitBB.Address)
+	}
+
+	return theBB, nil
+}
+
+func (bbtrace *BBTraceParser) OnEachBB(state BBAnalState) {
+	newBB := bbtrace.doc.BBManager.Get(state.BBAddr)
+
+	if newBB == nil {
+		newBB = bbtrace.doc.BBManager.Create(state.BBAddr)
+		if newBB == nil {
+			fmt.Printf("ERROR:\tunable to create BB at: 0x%08x, either already exists?\n", state.BBAddr)
+			return
+		} else {
+			newBB.LastAddress = state.LastAddr
+			newBB.BranchAddress = state.BranchAddr
+		}
+	} else if newBB.Address != state.BBAddr {
+		fmt.Printf("ERROR:\tfix me to split bb during OnEachBB at: 0x%08x\n", state.BBAddr)
+		return
+	}
+}
+
+func (bbtrace *BBTraceParser) OnEnterFunc(theBB *SoraBasicBlock, ra uint32) {
+	currentThread := bbtrace.Threads[bbtrace.CurrentID]
+
+	if currentThread.Stack.Len() > 0 {
+		if ra == 0 {
+			fmt.Printf("WARNING:\tundefined ra when entering func\n")
+		}
+		currentThread.Stack.Top().RA = ra
+	}
+
+	stack_item := &BBTraceStackItem{
+		Address: theBB.Address,
+	}
+	currentThread.Stack.Push(stack_item)
+
+	fmt.Printf("INFO:\tenter func bb 0x%08x\n", theBB.Address)
+}
+
+func (bbtrace *BBTraceParser) OnLeaveFunc(theBB *SoraBasicBlock) {
+	currentThread := bbtrace.Threads[bbtrace.CurrentID]
+
+	currentThread.Stack.Pop()
+	if currentThread.Stack.Len() > 0 {
+		expected_ra := currentThread.Stack.Top().RA
+
+		if expected_ra != theBB.Address {
+			fmt.Printf("WARNING:\tunexpected ra 0x%08x, expecting 0x%08x\n--- callback? ---\n", theBB.Address, expected_ra)
+			bbtrace.OnEnterFunc(theBB, expected_ra)
+		} else {
+			past_bb := currentThread.Stack.Top().Address
+			currentThread.Stack.Top().Address = theBB.Address
+			// FUNC
+
+			bbtrace.doc.BBManager.CreateReference(past_bb, theBB.Address).SetAdjacent(true)
+
+			// FLAMEGRAPH
+		}
+	} else {
+		// FUNC
+	}
+}
+
+func (bbtrace *BBTraceParser) OnMergingPastToLast(last_pc uint32) error {
+	currentThread := bbtrace.Threads[bbtrace.CurrentID]
+
+	past_addr := currentThread.Stack.Top().Address
+
+	for n := 0; true; n++ {
+		pastBB := bbtrace.doc.BBManager.Get(past_addr)
+
+		if pastBB == nil {
+			return fmt.Errorf("OnMergingPastToLast past BB notexist: 0x%08x towards: 0x%08x", past_addr, last_pc)
+		}
+
+		if n > 0 {
+			// FUNC
+			currentThread.Stack.Top().Address = pastBB.Address
+		} else {
+			if currentThread.Stack.Top().Address != pastBB.Address {
+				return fmt.Errorf("assert failed stack.Top.Address != pastBB.Address")
+			}
+		}
+
+		next_addr := pastBB.LastAddress + 4
+		fmt.Println(next_addr)
+		if pastBB.BranchAddress != 0 {
+			// INSTRUTION
+		}
+	}
+
+	return nil
 }
