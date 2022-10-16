@@ -8,6 +8,8 @@ import (
 type SoraInstruction struct {
 	Info models.MipsOpcode
 	Address uint32
+	Mnemonic string
+	Args []*SoraArgument
 }
 
 type InstructionManager struct {

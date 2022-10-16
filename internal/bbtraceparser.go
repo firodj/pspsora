@@ -5,8 +5,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-
-	"github.com/davecgh/go-spew/spew"
 )
 
 const (
@@ -167,8 +165,9 @@ func (bbtrace *BBTraceParser) Parse(cb BBTraceYield, length int) error {
 		for i := 0; i<size; i++ {
 			last_kind := kind
 
-			// last_pc := uint32(0)
+			last_pc := uint32(0)
 			pc := binary.LittleEndian.Uint32(records[i * 4:])
+			fmt.Printf("i = %d\n", i)
 
 			if ((pc & 0xFFFF0000) == 0) {
 				kind = uint16(pc & 0xFFFF)
@@ -177,14 +176,15 @@ func (bbtrace *BBTraceParser) Parse(cb BBTraceYield, length int) error {
 					i++
 					pc = binary.LittleEndian.Uint32(records[i * 4:])
 
-					fmt.Printf("INFO:\tstart 0x%08x\n", pc)
+					fmt.Printf("INFO:\tKIND_START pc=0x%08x\n", pc)
 					bbtrace.SetCurrentThreadPC(cur_ID, pc)
 				} else if (kind == KIND_NAME) {
 					i++
-					j := i+32
-					str := records[i * 4:j]
-					i = j
+					j := i+8
+					str := records[i * 4:j * 4]
+					i = j-1
 					name := string(str[0:FindFirstNull(str)])
+					fmt.Printf("INFO:\tKIND_NAME name=%s\n", name)
 					if last_kind == KIND_START {
 						bbtrace.Threads[bbtrace.CurrentID].Name = name
 					} else {
@@ -204,11 +204,15 @@ func (bbtrace *BBTraceParser) Parse(cb BBTraceYield, length int) error {
 				continue
 			}
 
+			i++
+			last_pc = binary.LittleEndian.Uint32(records[i * 4:])
+
 			if bbtrace.Threads[bbtrace.CurrentID].Executing {
 				param := BBTraceParam{
 					ID: bbtrace.CurrentID,
 					Kind: 0,
 					PC: pc,
+					LastPC: last_pc,
 					Nts: bbtrace.Nts,
 				}
 
@@ -256,24 +260,47 @@ func (bbtrace *BBTraceParser) SetCurrentThreadPC(id uint16, pc uint32) uint32 {
 }
 
 func (bbtrace *BBTraceParser) ParsingBB(param BBTraceParam) error {
-	last_pc := bbtrace.SetCurrentThreadPC(param.ID, param.PC)
+	bbtrace.SetCurrentThreadPC(param.ID, param.PC)
 
-	fmt.Printf("#%d {0x%08x, 0x%08x}\n", param.Nts, param.PC, last_pc)
+	fmt.Printf("#%d {0x%08x, 0x%08x}\n", param.Nts, param.PC, param.LastPC)
 
-	bb, err := bbtrace.EnsureBB(param.PC)
+	theBB, err := bbtrace.EnsureBB(param.PC)
 	if err != nil {
 		return err
 	}
-	spew.Dump(bb)
+	//spew.Dump(bb)
 
-	if last_pc == 0 {
+	if param.LastPC == 0 {
 		// Usually start thread doesn't have last_pc
-		// TODO: bbtrace.OnEnterFunc(...)
+		bbtrace.OnEnterFunc(theBB, 0)
 		return nil
 	}
 
-	fmt.Println("TODO: OnMergingPastToLast param.last_pc)")
+	bbtrace.OnMergingPastToLast(param.LastPC)
 
+	lastBB := bbtrace.doc.BBManager.Get(param.LastPC)
+	if lastBB == nil {
+		return fmt.Errorf("unable to get last BB 0x%08x at 0x%08x", param.LastPC, theBB.Address)
+	}
+
+	brInstr := bbtrace.doc.InstrManager.Get(lastBB.BranchAddress)
+	if brInstr == nil {
+		return fmt.Errorf("unable to get lat Instruction at 0x%08x", lastBB.BranchAddress)
+	}
+
+	bbtrace.doc.BBManager.CreateReference(lastBB.Address, theBB.Address)
+
+	if brInstr.Mnemonic == "jal" || brInstr.Mnemonic == "jalr" {
+		ra := brInstr.Address + 4
+		if brInstr.Info.HasDelaySlot {
+			ra += 4
+		}
+		bbtrace.OnEnterFunc(theBB, ra)
+	} else if brInstr.Mnemonic == "jr" && brInstr.Args[0].Reg == "ra" {
+		bbtrace.OnLeaveFunc(theBB)
+	} else {
+		bbtrace.OnContinueNext(theBB)
+	}
 
 	return nil
 }
@@ -322,6 +349,7 @@ func (bbtrace *BBTraceParser) OnEachBB(state BBAnalState) {
 
 func (bbtrace *BBTraceParser) OnEnterFunc(theBB *SoraBasicBlock, ra uint32) {
 	currentThread := bbtrace.Threads[bbtrace.CurrentID]
+	fmt.Printf("OnEnterFunc(0x%08x, ra=0x%08x)\n", theBB.Address, ra)
 
 	if currentThread.Stack.Len() > 0 {
 		if ra == 0 {
@@ -362,6 +390,12 @@ func (bbtrace *BBTraceParser) OnLeaveFunc(theBB *SoraBasicBlock) {
 	}
 }
 
+func (bbtrace *BBTraceParser) OnContinueNext(theBB *SoraBasicBlock) {
+	currentThread := bbtrace.Threads[bbtrace.CurrentID]
+	currentThread.Stack.Top().Address = theBB.Address
+	// FUNC
+}
+
 func (bbtrace *BBTraceParser) OnMergingPastToLast(last_pc uint32) error {
 	currentThread := bbtrace.Threads[bbtrace.CurrentID]
 
@@ -384,9 +418,35 @@ func (bbtrace *BBTraceParser) OnMergingPastToLast(last_pc uint32) error {
 		}
 
 		next_addr := pastBB.LastAddress + 4
-		fmt.Println(next_addr)
+
 		if pastBB.BranchAddress != 0 {
-			// INSTRUTION
+			pastBrInstr := bbtrace.doc.InstrManager.Get(pastBB.BranchAddress)
+
+			if pastBrInstr == nil {
+				return fmt.Errorf("no branch instr for past BB at 0x%08x", pastBB.BranchAddress)
+			}
+
+			if pastBrInstr.Info.IsLikelyBranch {
+				if pastBB.BranchAddress == last_pc {
+					break
+				}
+			}
+
+			if pastBB.LastAddress == last_pc {
+				break
+			}
+
+			if pastBrInstr.Info.IsConditional {
+				next_addr = pastBB.LastAddress + 4
+				if pastBrInstr.Info.IsBranchToRegister {
+					fmt.Printf("WARNING:\tunimplemented conditional register branch for merging\n")
+				}
+			} else if pastBrInstr.Info.IsBranchToRegister {
+				break
+			}
+
+			bbtrace.doc.BBManager.CreateReference(pastBB.Address, next_addr).SetAdjacent(true)
+			past_addr = next_addr
 		}
 	}
 

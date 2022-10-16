@@ -5,8 +5,39 @@ import (
 	"os"
 	"runtime"
 
+	"github.com/davecgh/go-spew/spew"
 	"github.com/firodj/pspsora/internal"
 )
+
+func testSysCall(doc *internal.SoraDocument) {
+	instr := doc.Disasm(doc.EntryAddr)
+	fmt.Println(instr.Info.Dizz)
+	spew.Dump(doc.ParseDizz(instr.Info.Dizz))
+
+	instr = doc.Disasm(0x8A38A70)
+	fmt.Println(instr.Info.Dizz)
+	spew.Dump(doc.ParseDizz(instr.Info.Dizz))
+
+	instr = doc.Disasm(0x8A38A74)
+	fmt.Println(instr.Info.Dizz)
+	spew.Dump(doc.ParseDizz(instr.Info.Dizz))
+
+	instr = doc.Disasm(0x8804140)
+	fmt.Println(instr.Info.Dizz)
+	spew.Dump(doc.ParseDizz(instr.Info.Dizz))
+}
+
+func testBBTrace(doc *internal.SoraDocument) {
+	err := doc.Parser.Parse(
+		func (param internal.BBTraceParam) {
+
+		},
+		20,
+	)
+	if err != nil {
+		fmt.Println(err)
+	}
+}
 
 func main() {
 	home := os.Getenv("HOME")
@@ -26,21 +57,17 @@ func main() {
 		fmt.Println(*entryName)
 	}
 
-	doc.Disasm(doc.EntryAddr)
-	funStart := doc.FunManager.Get(doc.EntryAddr)
-	fmt.Println(funStart.Name, funStart.Address, funStart.Size, funStart.LastAddress())
-	anal := internal.NewFunctionAnalyzer(doc, funStart)
-	anal.Process()
+	//testSysCall(doc)
 
-	err = doc.Parser.Parse(
-		func (param internal.BBTraceParam) {
+	//funStart := doc.FunManager.Get(doc.EntryAddr)
+	//fmt.Println(funStart.Name, funStart.Address, funStart.Size, funStart.LastAddress())
+	//anal := internal.NewFunctionAnalyzer(doc, funStart)
+	//anal.Process()
 
-		},
-		1000,
-	)
-	if err != nil {
-		fmt.Println(err)
-	}
+	testBBTrace(doc)
+
+
+
 
 	defer doc.Delete()
 }

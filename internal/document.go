@@ -194,17 +194,84 @@ func (doc *SoraDocument) Disasm(address uint32) *SoraInstruction {
 		return instr
 	}
 	instr = doc.InstrManager.Create(address, bridge.MIPSAnalystGetOpcodeInfo(address))
+	mnemonic, args := doc.ParseDizz(instr.Info.Dizz)
+	instr.Mnemonic = mnemonic
+	instr.Args = args
 	return instr
 }
 
-func (doc *SoraDocument) ParseDizz(dizz string) (mnemonic string, arguments []string) {
+type SoraArgType string
+
+const (
+	ArgNone SoraArgType = ""
+	ArgImm SoraArgType = "imm"
+	ArgReg SoraArgType = "reg"
+	ArgMem SoraArgType = "mem"
+)
+type SoraArgument struct {
+	Type SoraArgType
+	Label string
+	ValOfs int
+	Reg string
+	IsCodeLocation bool
+}
+
+func NewSoraArgument(opr string, labellookup func(uint32)*string) (arg *SoraArgument) {
+	if len(opr) == 2 {
+		return &SoraArgument{
+			Type: ArgReg,
+			Reg: opr,
+		}
+	}
+
+	arg = &SoraArgument{}
+
+	lookup := false
+	if strings.HasPrefix(opr, "->$") {
+		opr = "0x" + opr[3:]
+		arg.IsCodeLocation = true
+		lookup = true
+	} else if strings.HasPrefix(opr, "->") {
+		opr = opr[2:]
+		arg.IsCodeLocation = true
+	}
+
+	var imm int
+	var rs string
+
+	n, _ := fmt.Sscanf(opr, "%v(%s)", &imm, &rs)
+	if n >= 1 {
+		arg.Type = ArgImm
+		arg.ValOfs = imm
+		if n >= 2 {
+			arg.Type = ArgMem
+			arg.Reg = rs[:len(rs)-1]
+		}
+	} else {
+		arg.Type = ArgReg
+		arg.Reg = opr
+	}
+
+	if (lookup) {
+		if labellookup != nil {
+			label := labellookup(uint32(arg.ValOfs))
+			if label != nil {
+				arg.Label = *label
+			}
+		}
+	}
+	return
+}
+
+func (doc *SoraDocument) ParseDizz(dizz string) (mnemonic string, arguments []*SoraArgument) {
 	params := strings.Split(dizz, "\t")
 	mnemonic = params[0]
 
 	for _, param := range params[1:] {
 		argz := strings.Split(param, ",")
 		for _, a := range argz {
-			arguments = append(arguments, a)
+			var arg *SoraArgument = NewSoraArgument(a, doc.SymMap.GetLabelName)
+			arguments = append(arguments, arg)
 		}
 	}
 
