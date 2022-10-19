@@ -3,6 +3,7 @@ module github.com/firodj/pspsora
 go 1.19
 
 require (
+	github.com/bahlo/generic-list-go v0.2.0 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/fatih/color v1.13.0 // indirect
 	github.com/google/uuid v1.3.0 // indirect
@@ -21,6 +22,7 @@ require (
 	github.com/uptrace/bun/extra/bundebug v1.1.8 // indirect
 	github.com/vmihailenco/msgpack/v5 v5.3.5 // indirect
 	github.com/vmihailenco/tagparser/v2 v2.0.0 // indirect
+	github.com/wk8/go-ordered-map/v2 v2.0.0 // indirect
 	golang.org/x/exp v0.0.0-20221006183845-316c7553db56 // indirect
 	golang.org/x/mod v0.6.0-dev.0.20220419223038-86c51ed26bb4 // indirect
 	golang.org/x/sys v0.0.0-20220825204002-c680a09ffe64 // indirect

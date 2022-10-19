@@ -10,6 +10,12 @@ import (
 )
 
 func testSysCall(doc *internal.SoraDocument) {
+	entryName := doc.SymMap.GetLabelName(doc.EntryAddr)
+	fmt.Println(doc.EntryAddr)
+	if entryName != nil {
+		fmt.Println(*entryName)
+	}
+
 	instr := doc.Disasm(doc.EntryAddr)
 	fmt.Println(instr.Info.Dizz)
 	spew.Dump(doc.ParseDizz(instr.Info.Dizz))
@@ -28,14 +34,11 @@ func testSysCall(doc *internal.SoraDocument) {
 }
 
 func testBBTrace(doc *internal.SoraDocument) {
-	err := doc.Parser.Parse(
-		func (param internal.BBTraceParam) {
-
-		},
-		20,
-	)
+	err := doc.Parser.Parse(0)
+	doc.Parser.DumpAllFunGraph()
+	doc.Parser.DumpAllCallHistory()
 	if err != nil {
-		fmt.Println(err)
+		panic(err)
 	}
 }
 
@@ -46,18 +49,12 @@ func main() {
 	}
 	fmt.Println(home)
 
-	doc, err := internal.NewSoraDocument(home + "/Sora", true)
+	doc, err := internal.NewSoraDocument(home+"/Sora", true)
 	if err != nil {
 		fmt.Println(err)
 	}
 
-	entryName := doc.SymMap.GetLabelName(doc.EntryAddr)
-	fmt.Println(doc.EntryAddr)
-	if entryName != nil {
-		fmt.Println(*entryName)
-	}
-
-	//testSysCall(doc)
+	testSysCall(doc)
 
 	//funStart := doc.FunManager.Get(doc.EntryAddr)
 	//fmt.Println(funStart.Name, funStart.Address, funStart.Size, funStart.LastAddress())
@@ -65,9 +62,6 @@ func main() {
 	//anal.Process()
 
 	testBBTrace(doc)
-
-
-
 
 	defer doc.Delete()
 }

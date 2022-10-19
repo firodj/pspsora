@@ -14,7 +14,9 @@ func TestAka(t *testing.T) {
 	assert.NotNil(t, repo)
 	ctx := context.Background()
 
-	repo.db.ExecContext(ctx, "SELECT 1")
-	repo.db.NewCreateTable().Model((*models.BasicBlock)(nil)).Exec(ctx)
+	_, err := repo.db.ExecContext(ctx, "SELECT 1")
+	assert.NoError(t, err)
 
+	_, err = repo.db.NewCreateTable().Model((*models.BasicBlock)(nil)).Exec(ctx)
+	assert.NoError(t, err)
 }

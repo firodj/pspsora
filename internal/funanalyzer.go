@@ -25,7 +25,7 @@ func (anal *FunctionAnalyzer) Process() {
 	bb_visits := make(map[uint32]*BBVisit)
 	for _, bb_addr := range anal.fun.BBAddresses {
 		bb_visits[bb_addr] = &BBVisit{
-			BB: anal.doc.BBManager.Get(bb_addr),
+			BB:      anal.doc.BBManager.Get(bb_addr),
 			Visited: false,
 		}
 	}
@@ -51,18 +51,15 @@ func (anal *FunctionAnalyzer) Process() {
 
 		fmt.Println("---")
 
-
 	}
 
 	// TODO:
 	/*
-	anal.ProcessBB(fun.Address, fun.LastAddress(), func (bbas BBAnalState) {
-		fmt.Printf("bb:0x%08x br:0x%08x last_addr:0x%08x\n", bbas.BBAddr, bbas.BranchAddr, bbas.LastAddr)
-		for _, line := range bbas.Lines {
-			fmt.Printf("\t0x%08x %s\n", line.Address, line.Dizz)
-		}
-	})
+		anal.ProcessBB(fun.Address, fun.LastAddress(), func (bbas BBAnalState) {
+			fmt.Printf("bb:0x%08x br:0x%08x last_addr:0x%08x\n", bbas.BBAddr, bbas.BranchAddr, bbas.LastAddr)
+			for _, line := range bbas.Lines {
+				fmt.Printf("\t0x%08x %s\n", line.Address, line.Dizz)
+			}
+		})
 	*/
 }
-
-

@@ -11,6 +11,7 @@ import (
 
 	"github.com/firodj/pspsora/bridge"
 )
+
 type PSPSegment struct {
 	Addr uint32 `yaml:"addr"`
 	Size int    `yaml:"size"`
@@ -33,12 +34,25 @@ type SoraFunction struct {
 	Name        string   `yaml:"name"`
 	Address     uint32   `yaml:"address"`
 	Size        uint32   `yaml:"size"`
-	BBAddresses []uint32 `yaml:bb_addresses"`
-
+	BBAddresses []uint32 `yaml:"bb_addresses"`
 }
 
 func (fun *SoraFunction) LastAddress() uint32 {
 	return fun.Address + fun.Size - 4
+}
+
+func (fun *SoraFunction) SetLastAddress(last_addr uint32) {
+	fun.Size = last_addr - fun.Address + 4
+}
+
+func (fun *SoraFunction) AddBB(bb_addr uint32) {
+	for _, ex_bb := range fun.BBAddresses {
+		if ex_bb == bb_addr {
+			return
+		}
+	}
+
+	fun.BBAddresses = append(fun.BBAddresses, bb_addr)
 }
 
 type PSPHLEFunction struct {
@@ -76,21 +90,21 @@ type SoraYaml struct {
 }
 
 type SoraDocument struct {
-	yaml     SoraYaml
+	yaml SoraYaml
 
 	// HLEModules (yaml)
-	Parser  *BBTraceParser
-	BBManager      *BasicBlockManager
-	FunManager     *FunctionManager
-	InstrManager     *InstructionManager
+	Parser       *BBTraceParser
+	BBManager    *BasicBlockManager
+	FunManager   *FunctionManager
+	InstrManager *InstructionManager
 
 	// MemoryDump
-	buf      unsafe.Pointer
+	buf unsafe.Pointer
 
 	// UseDef Analyzer
 
 	// SymbolMap
-	SymMap   *SymbolMap
+	SymMap *SymbolMap
 
 	mapAddrToFunc map[uint32]int
 	mapNameToFunc map[string][]int
@@ -126,10 +140,10 @@ func (doc *SoraDocument) LoadMemory(filename string) error {
 func NewSoraDocument(path string, load_analyzed bool) (*SoraDocument, error) {
 	main_yaml := filepath.Join(path, "Sora.yaml")
 	main_data := filepath.Join(path, "SoraMemory.bin")
-	bb_data   := filepath.Join(path, "SoraBBTrace.rec")
+	bb_data := filepath.Join(path, "SoraBBTrace.rec")
 
 	doc := &SoraDocument{
-		SymMap: CreateSymbolMap(),
+		SymMap:        CreateSymbolMap(),
 		mapAddrToFunc: make(map[uint32]int),
 		mapNameToFunc: make(map[string][]int),
 	}
@@ -204,23 +218,24 @@ type SoraArgType string
 
 const (
 	ArgNone SoraArgType = ""
-	ArgImm SoraArgType = "imm"
-	ArgReg SoraArgType = "reg"
-	ArgMem SoraArgType = "mem"
+	ArgImm  SoraArgType = "imm"
+	ArgReg  SoraArgType = "reg"
+	ArgMem  SoraArgType = "mem"
 )
+
 type SoraArgument struct {
-	Type SoraArgType
-	Label string
-	ValOfs int
-	Reg string
+	Type           SoraArgType
+	Label          string
+	ValOfs         int
+	Reg            string
 	IsCodeLocation bool
 }
 
-func NewSoraArgument(opr string, labellookup func(uint32)*string) (arg *SoraArgument) {
+func NewSoraArgument(opr string, labellookup func(uint32) *string) (arg *SoraArgument) {
 	if len(opr) == 2 {
 		return &SoraArgument{
 			Type: ArgReg,
-			Reg: opr,
+			Reg:  opr,
 		}
 	}
 
@@ -252,7 +267,7 @@ func NewSoraArgument(opr string, labellookup func(uint32)*string) (arg *SoraArgu
 		arg.Reg = opr
 	}
 
-	if (lookup) {
+	if lookup {
 		if labellookup != nil {
 			label := labellookup(uint32(arg.ValOfs))
 			if label != nil {

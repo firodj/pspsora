@@ -2,7 +2,7 @@ package models
 
 import "github.com/uptrace/bun"
 
-type BasicBlock struct  {
+type BasicBlock struct {
 	bun.BaseModel
 
 	ID            int64 `bun:",pk,autoincrement"`

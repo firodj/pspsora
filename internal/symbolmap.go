@@ -36,3 +36,7 @@ func (symmap *SymbolMap) AddFunction(name string, address uint32, size uint32, m
 func (symmap *SymbolMap) AddModule(name string, address uint32, size uint32) {
 	bridge.SymbolMap_AddModule(symmap.ptr, name, address, size)
 }
+
+func (symmap *SymbolMap) SetFunctionSize(address uint32, size uint32) bool {
+	return bridge.SymbolMap_SetFunctionSize(symmap.ptr, address, size)
+}

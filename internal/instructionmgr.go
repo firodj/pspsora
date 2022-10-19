@@ -6,10 +6,10 @@ import (
 )
 
 type SoraInstruction struct {
-	Info models.MipsOpcode
-	Address uint32
+	Info     models.MipsOpcode
+	Address  uint32
 	Mnemonic string
-	Args []*SoraArgument
+	Args     []*SoraArgument
 }
 
 type InstructionManager struct {
@@ -29,7 +29,7 @@ func (mgr *InstructionManager) Create(addr uint32, info *models.MipsOpcode) *Sor
 		return nil
 	}
 	instr := &SoraInstruction{
-		Info: *info,
+		Info:    *info,
 		Address: addr,
 	}
 	mgr.instructions.Insert(addr, instr)

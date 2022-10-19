@@ -27,7 +27,7 @@ func TestNewSoraArgument(t *testing.T) {
 	assert.Equal(t, -20, arg.ValOfs)
 	assert.Equal(t, "sp", arg.Reg)
 
-	arg = NewSoraArgument("->$08a38a70", func (addr uint32) *string {
+	arg = NewSoraArgument("->$08a38a70", func(addr uint32) *string {
 		assert.Equal(t, uint32(0x08a38a70), addr)
 		label := "z_unknown"
 		return &label

@@ -7,11 +7,11 @@ import (
 type BBYieldFunc func(state BBAnalState)
 
 type BBAnalState struct {
-	BBAddr uint32
+	BBAddr     uint32
 	BranchAddr uint32
-	LastAddr uint32
-	Lines []*SoraInstruction
-  Count int
+	LastAddr   uint32
+	Lines      []*SoraInstruction
+	Count      int
 }
 
 func (bbas *BBAnalState) Init() {

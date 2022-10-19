@@ -115,6 +115,14 @@ func SymbolMap_AddModule(symmap CSymbolMap, name string, address uint32, size ui
   )
 }
 
+func SymbolMap_SetFunctionSize(symmap CSymbolMap, address uint32, size uint32) bool {
+  return C.SymbolMap_SetFunctionSize(
+    C.BridgeSymbolMap(symmap),
+    C.uint32_t(address),
+    C.uint32_t(size),
+  ) != 0
+}
+
 func GlobalSetSymbolMap(symmap CSymbolMap) {
   C.GlobalSetSymbolMap(C.BridgeSymbolMap(symmap))
 }

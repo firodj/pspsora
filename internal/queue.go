@@ -14,8 +14,8 @@ func (q *Queue[T]) Len() int {
 }
 
 func (q *Queue[T]) Pop() T {
-	element := q.elements[0]
-	q.elements = q.elements[1:]
+	element := q.elements[q.Len()-1]
+	q.elements = q.elements[:q.Len()-1]
 	return element
 }
 
