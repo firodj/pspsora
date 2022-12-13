@@ -46,7 +46,6 @@ func testSysCall(doc *internal.SoraDocument) *ffcli.Command {
 	}
 }
 
-
 func testDisasm(doc *internal.SoraDocument) *ffcli.Command {
 	return &ffcli.Command{
 		Name: "testDisasm",
@@ -113,7 +112,7 @@ func doRunningProcess(ctx context.Context) chan int {
 }
 
 func testBBTrace(doc *internal.SoraDocument) *ffcli.Command {
-	return &ffcli.Command {
+	return &ffcli.Command{
 		Name: "testBBTrace",
 		Exec: func(ctx context.Context, args []string) error {
 
@@ -129,15 +128,15 @@ func testBBTrace(doc *internal.SoraDocument) *ffcli.Command {
 }
 
 func testLongRunningProcess() *ffcli.Command {
-	return &ffcli.Command {
+	return &ffcli.Command{
 		Name: "testLongRunningProcess",
 		Exec: func(ctx context.Context, args []string) error {
 			c := doRunningProcess(ctx)
 
-			consumer := func () error {
+			consumer := func() error {
 				for n := range c {
 					fmt.Printf("%d ", n)
-					time.Sleep(500 * time.Millisecond )
+					time.Sleep(500 * time.Millisecond)
 				}
 				return ctx.Err()
 			}
