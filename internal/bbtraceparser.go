@@ -136,7 +136,6 @@ func (bbtrace *BBTraceParser) Parse(ctx context.Context, length int) error {
 
 	bbtrace.Threads = make(map[uint16]*BBTraceThreadState)
 
-	ok := true
 	bbtrace.Nts = 1
 	bbtrace.Fts = 1
 	initial_length := length
@@ -145,49 +144,50 @@ func (bbtrace *BBTraceParser) Parse(ctx context.Context, length int) error {
 	buf32 := make([]byte, 4)
 	buf16 := make([]byte, 2)
 
-	defer bbtrace.EndParsing()
-
-	for ok {
-		_, err := bin.Read(buf16)
+	process := func(ctx context.Context, ch chan error) (stop bool, err error) {
+		_, err = bin.Read(buf16)
 		if err != nil {
 			if err != io.EOF {
-				return err
+				return
 			}
 			fmt.Println("INFO:\tstop by EOF")
-			break
+			stop = true
+			return
 		}
 
 		kind := uint16(binary.LittleEndian.Uint16(buf16))
 		if kind != KIND_ID {
-			return fmt.Errorf("ERROR:\tunmatched kind 'ID', found: 0x%x", kind)
+			err = fmt.Errorf("ERROR:\tunmatched kind 'ID', found: 0x%x", kind)
+			return
 		}
 
 		_, err = bin.Read(buf16)
 		if err != nil {
-			return err
+			return
 		}
 		cur_ID = uint16(binary.LittleEndian.Uint16(buf16))
 
 		_, err = bin.Read(buf16)
 		if err != nil {
-			return err
+			return
 		}
 		kind = uint16(binary.LittleEndian.Uint16(buf16))
 
 		if kind != KIND_SZ {
-			return fmt.Errorf("ERROR:\tunmatched kind 'SZ', found: 0x%x", kind)
+			err = fmt.Errorf("ERROR:\tunmatched kind 'SZ', found: 0x%x", kind)
+			return
 		}
 
 		_, err = bin.Read(buf32)
 		if err != nil {
-			return err
+			return
 		}
 		size := int(binary.LittleEndian.Uint32(buf32))
 
 		records := make([]byte, size*4)
 		_, err = bin.Read(records)
 		if err != nil {
-			return err
+			return
 		}
 
 		fmt.Printf("INFO:\t[%d] read record size=%d\n", cur_ID, size)
@@ -198,7 +198,19 @@ func (bbtrace *BBTraceParser) Parse(ctx context.Context, length int) error {
 			currentThread.CallHistory.Fts = bbtrace.Fts
 		}
 
+		err = nil
 		for i := 0; i < size; i++ {
+			select {
+			case <-ctx.Done():
+				fmt.Println("canceling")
+				err = ctx.Err()
+			default:
+			}
+
+			if stop || err != nil {
+				break
+			}
+
 			last_kind := kind
 
 			last_pc := uint32(0)
@@ -207,13 +219,14 @@ func (bbtrace *BBTraceParser) Parse(ctx context.Context, length int) error {
 			if (pc & 0xFFFF0000) == 0 {
 				kind = uint16(pc & 0xFFFF)
 
-				if kind == KIND_START {
+				switch kind {
+				case KIND_START:
 					i++
 					pc = binary.LittleEndian.Uint32(records[i*4:])
 
 					past_pc := bbtrace.SetCurrentThreadPC(pc)
 					fmt.Printf("INFO:\t[%d] #(%d/%d) KIND_START pc=0x%08x last_pc=0x%08x\n", cur_ID, i-1, size, pc, past_pc)
-				} else if kind == KIND_NAME {
+				case KIND_NAME:
 					i++
 					j := i + 8
 					str := records[i*4 : j*4]
@@ -226,22 +239,20 @@ func (bbtrace *BBTraceParser) Parse(ctx context.Context, length int) error {
 						if currentThread.CallHistory != nil {
 							currentThread.CallHistory.AddMarker(bbtrace.Nts, currentThread.Name)
 						}
-					} else {
-						err := fmt.Errorf("unknown name for what last_kind: 0x%04x", last_kind)
-						return err
-					}
 
-					switch name {
-					case "idle0", "idle1", "SceIoAsync":
-						currentThread.Executing = false
+						switch name {
+						case "idle0", "idle1", "SceIoAsync":
+							currentThread.Executing = false
+						}
+					} else {
+						err = fmt.Errorf("unknown name for what last_kind: 0x%04x", last_kind)
 					}
-				} else if kind == KIND_END {
+				case KIND_END:
 					i++
 					end_pc := binary.LittleEndian.Uint32(records[i*4:])
 					fmt.Printf("INFO:\t[%d] #(%d/%d) KIND_END end_pc=0x%08x\n", cur_ID, i-1, size, end_pc)
-				} else {
-					err := fmt.Errorf("[%d] unknown kind: 0x%04x", cur_ID, kind)
-					return err
+				default:
+					err = fmt.Errorf("[%d] unknown kind: 0x%04x", cur_ID, kind)
 				}
 
 				continue
@@ -261,9 +272,9 @@ func (bbtrace *BBTraceParser) Parse(ctx context.Context, length int) error {
 
 				//fmt.Printf("DEBUG:\t[%d] #(%d/%d) %d {0x%08x, 0x%08x}\n", cur_ID, i-1, size, param.Nts, param.PC, param.LastPC)
 
-				err := bbtrace.ParsingBB(param)
+				err = bbtrace.ParsingBB(param)
 				if err != nil {
-					return err
+					break
 				}
 			} else {
 				fmt.Printf("DEBUG:\t[%d] #(%d/%d) skip thread %s (0x%08x, 0x%08x)\n", cur_ID, i-1, size, currentThread.Name,
@@ -275,8 +286,8 @@ func (bbtrace *BBTraceParser) Parse(ctx context.Context, length int) error {
 			if length > 0 {
 				length -= 1
 				if length == 0 {
-					ok = false
 					fmt.Printf("INFO:\tstop by length (%d)\n", initial_length)
+					stop = true
 					break
 				}
 			}
@@ -286,9 +297,37 @@ func (bbtrace *BBTraceParser) Parse(ctx context.Context, length int) error {
 			currentThread.CallHistory.AddMarker(bbtrace.Nts, currentThread.Name)
 			bbtrace.Fts = currentThread.CallHistory.Fts
 		}
+
+		return
 	}
 
-	return nil
+	ch := make(chan error)
+
+	producer := func() {
+		for {
+			stop, err := process(ctx, ch)
+
+			ch <- err
+
+			if stop || err != nil {
+				break
+			}
+		}
+		close(ch)
+	}
+
+	consumer := func() (err error) {
+		for err = range ch {
+			if err != nil {
+				return
+			}
+		}
+		return
+	}
+
+	go producer()
+	defer bbtrace.EndParsing()
+	return consumer()
 }
 
 func (bbtrace *BBTraceParser) SetCurrentThread(id uint16) *BBTraceThreadState {
