@@ -65,7 +65,7 @@ func (bst *AVLTree[K, T]) Insert(key K, value T) {
 }
 
 func (bst *AVLTree[K, T]) createNode(key K, value T) *Node[K, T] {
-	bst.nodeCount += 1
+	bst.nodeCount++
 	return &Node[K, T]{key, value, nil, nil, nil, 1}
 }
 

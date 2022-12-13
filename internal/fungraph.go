@@ -15,9 +15,10 @@ type FunGraphNode struct {
 	ParentID FunGraphNodeID
 	Subs     *orderedmap.OrderedMap[uint32, FunGraphNodeID]
 
-	Address uint32
-	Fun     *SoraFunction
-	Count   int64
+	Address  uint32
+	Fun      *SoraFunction
+	Count    int64
+	Duration int64
 }
 
 type FunGraph struct {
@@ -36,7 +37,7 @@ func NewFunGraph() *FunGraph {
 		nodes: new(binarysearchtree.AVLTree[FunGraphNodeID, *FunGraphNode]),
 	}
 	g.nodes.Insert(g.root.ID, g.root)
-	g.index += 1
+	g.index++
 
 	return g
 }
@@ -81,9 +82,9 @@ func (g *FunGraph) DumpNode(level int, parent_ID FunGraphNodeID) {
 		fmt.Print("+ ")
 
 		if node.Fun != nil {
-			fmt.Printf("%s (%d)", node.Fun.Name, node.Count)
+			fmt.Printf("%s (%d)", node.Fun.Name, node.Duration)
 		} else {
-			fmt.Printf("0x%08x (%d)", node.Address, node.Count)
+			fmt.Printf("0x%08x (%d)", node.Address, node.Duration)
 		}
 
 		fmt.Println()

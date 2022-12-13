@@ -24,6 +24,13 @@ var g_AllocatedCString []*C.char = nil
 var m sync.Mutex
 var g_memoryBase unsafe.Pointer = nil
 
+func Cbool(v bool) C.int {
+  if v {
+    return C.int(1)
+  }
+  return C.int(0)
+}
+
 func FreeAllocatedCString() {
   m.Lock()
   defer m.Unlock()
@@ -120,6 +127,14 @@ func SymbolMap_SetFunctionSize(symmap CSymbolMap, address uint32, size uint32) b
     C.BridgeSymbolMap(symmap),
     C.uint32_t(address),
     C.uint32_t(size),
+  ) != 0
+}
+
+func SymbolMap_RemoveFunction(symmap CSymbolMap, address uint32, removeName bool) bool {
+  return C.SymbolMap_RemoveFunction(
+    C.BridgeSymbolMap(symmap),
+    C.uint32_t(address),
+    Cbool(removeName),
   ) != 0
 }
 

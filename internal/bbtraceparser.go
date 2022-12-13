@@ -1,6 +1,7 @@
 package internal
 
 import (
+	"context"
 	"encoding/binary"
 	"fmt"
 	"io"
@@ -126,7 +127,7 @@ func (bbtrace *BBTraceParser) EndParsing() {
 	}
 }
 
-func (bbtrace *BBTraceParser) Parse(length int) error {
+func (bbtrace *BBTraceParser) Parse(ctx context.Context, length int) error {
 	bin, err := os.Open(bbtrace.filename)
 	if err != nil {
 		return err
@@ -299,7 +300,7 @@ func (bbtrace *BBTraceParser) SetCurrentThread(id uint16) *BBTraceThreadState {
 				RegSP:       0,
 				PC:          0,
 				Executing:   true,
-				FunGraph:    nil, //NewFunGraph(),
+				FunGraph:    NewFunGraph(),
 				CallHistory: nil, //NewCallHistory(),
 				Stack:       new(Queue[*BBTraceStackItem]),
 			}
@@ -408,22 +409,6 @@ func (bbtrace *BBTraceParser) OnEachBB(state BBAnalState) {
 	}
 }
 
-func (bbtrace *BBTraceParser) Debug(theBB *SoraBasicBlock, mode string) {
-	return
-
-	fmt.Printf("DEBUG: [%s]\n", mode)
-	for addr := theBB.Address; addr <= theBB.LastAddress; addr += 4 {
-		instr := bbtrace.doc.InstrManager.Get(addr)
-		fmt.Print("\t")
-		if instr.Address == theBB.BranchAddress {
-			fmt.Print("* ")
-		} else {
-			fmt.Print("  ")
-		}
-		fmt.Printf("0x%08x: %s\n", instr.Address, instr.Info.Dizz)
-	}
-}
-
 func (bbtrace *BBTraceParser) OnEnterFunc(theBB *SoraBasicBlock, ra uint32) {
 	currentThread := bbtrace.Threads[bbtrace.CurrentID]
 	parent_ID := FunGraphNodeID(0)
@@ -467,6 +452,7 @@ func (bbtrace *BBTraceParser) OnEnterFunc(theBB *SoraBasicBlock, ra uint32) {
 	if currentThread.FunGraph != nil {
 		node := currentThread.FunGraph.AddNode(theBB.Address, parent_ID)
 		node.Fun = theFunc
+		node.Duration++
 		stack_item.NodeID = node.ID
 	}
 
@@ -482,7 +468,7 @@ func (bbtrace *BBTraceParser) OnEnterFunc(theBB *SoraBasicBlock, ra uint32) {
 	//	fmt.Printf(" name=%s", theFunc.Name)
 	//}
 	//fmt.Println()
-	bbtrace.Debug(theBB, "enter")
+	bbtrace.doc.DebugBB(theBB, "enter")
 }
 
 func (bbtrace *BBTraceParser) OnLeaveFunc(theBB *SoraBasicBlock) {
@@ -513,7 +499,7 @@ func (bbtrace *BBTraceParser) OnLeaveFunc(theBB *SoraBasicBlock) {
 				currentThread.CallHistory.EndBlock(level, bbtrace.Nts)
 			}
 
-			bbtrace.Debug(theBB, "leave")
+			bbtrace.doc.DebugBB(theBB, "leave")
 		}
 	} else {
 		myFunc := bbtrace.doc.FunManager.Get(theBB.Address)
@@ -523,7 +509,7 @@ func (bbtrace *BBTraceParser) OnLeaveFunc(theBB *SoraBasicBlock) {
 		}
 		fmt.Println()
 
-		bbtrace.Debug(theBB, "end")
+		bbtrace.doc.DebugBB(theBB, "end")
 	}
 }
 
@@ -531,7 +517,7 @@ func (bbtrace *BBTraceParser) OnContinueNext(theBB *SoraBasicBlock) {
 	currentThread := bbtrace.Threads[bbtrace.CurrentID]
 	currentThread.Stack.Top().SetAddress(theBB)
 
-	bbtrace.Debug(theBB, "continue")
+	bbtrace.doc.DebugBB(theBB, "continue")
 }
 
 func (bbtrace *BBTraceParser) OnMergingPastToLast(last_pc uint32) error {
@@ -559,7 +545,7 @@ func (bbtrace *BBTraceParser) OnMergingPastToLast(last_pc uint32) error {
 
 		if n > 0 {
 			currentThread.Stack.Top().SetAddress(pastBB)
-			bbtrace.Debug(pastBB, "merging")
+			bbtrace.doc.DebugBB(pastBB, "merging")
 		} else {
 			if currentThread.Stack.Top().Address() != pastBB.Address {
 				return fmt.Errorf("assert failed, expect stack.Top.Address == pastBB.Address")

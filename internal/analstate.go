@@ -50,5 +50,5 @@ func (bbas *BBAnalState) Yield(last_addr uint32, cb BBYieldFunc) {
 	cb(*bbas)
 
 	bbas.Reset()
-	bbas.Count += 1
+	bbas.Count++
 }

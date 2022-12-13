@@ -123,7 +123,7 @@ func (doc *SoraDocument) LoadYaml(filename string) error {
 	if err != nil {
 		return err
 	}
-
+	fmt.Println("main Yaml:", filename)
 	return nil
 }
 
@@ -132,6 +132,7 @@ func (doc *SoraDocument) LoadMemory(filename string) error {
 	if err != nil {
 		return err
 	}
+	fmt.Println("main Data:", filename)
 	doc.buf = bridge.GlobalSetMemoryBase(data, doc.yaml.Memory.Start)
 
 	return nil
@@ -332,4 +333,18 @@ func (doc *SoraDocument) ProcessBB(start_addr uint32, last_addr uint32, cb BBYie
 	bbas.Yield(last_addr, cb)
 
 	return bbas.Count
+}
+
+func (doc *SoraDocument) DebugBB(theBB *SoraBasicBlock, mode string) {
+	fmt.Printf("DEBUG: [%s]\n", mode)
+	for addr := theBB.Address; addr <= theBB.LastAddress; addr += 4 {
+		instr := doc.InstrManager.Get(addr)
+		fmt.Print("\t")
+		if instr.Address == theBB.BranchAddress {
+			fmt.Print("* ")
+		} else {
+			fmt.Print("  ")
+		}
+		fmt.Printf("0x%08x: %s\n", instr.Address, instr.Info.Dizz)
+	}
 }
