@@ -51,9 +51,7 @@ func testDisasm(doc *internal.SoraDocument) *ffcli.Command {
 	return &ffcli.Command{
 		Name: "testDisasm",
 		Exec: func(ctx context.Context, args []string) error {
-
 			doc.ProcessBB(0x08a0e874, 0, GetPrintLines(doc))
-
 			doc.ProcessBB(0x08a0e890, 0, GetPrintLines(doc))
 			return nil
 		},
@@ -82,38 +80,36 @@ func GetPrintLines(doc *internal.SoraDocument) internal.BBYieldFunc {
 				fmt.Print(" ")
 			}
 			fmt.Printf("0x%08x\t%s\n", line.Address, line.Info.Dizz)
-
 		}
 		//fmt.Printf("last 0x%08x, branch 0x%08x\n", state.LastAddr, state.BranchAddr)
 		fmt.Printf("---\n")
 	}
 }
 
-func doRunningProcess(ctx context.Context) error {
-	n := 0
-
+func doRunningProcess(ctx context.Context) chan int {
 	c := make(chan int)
-	go func () {
+
+	producer := func() {
+		n := 0
 		for {
-			n := <- c
-			fmt.Printf("%d ", n)
-			time.Sleep(500 * time.Millisecond )
-		}
-	}()
-
-	for {
-		n += 1
-
-		select {
-		case <-ctx.Done():
-			fmt.Println("canceled")
-			return ctx.Err()
-		case c <- n:
-			if n > 1000 {
-				return nil
+			select {
+			case <-ctx.Done():
+				fmt.Println("canceled")
+				close(c)
+				return
+			case c <- n:
+				n += 1
+				if n > 20 {
+					close(c)
+					return
+				}
 			}
 		}
 	}
+
+	go producer()
+
+	return c
 }
 
 func testBBTrace(doc *internal.SoraDocument) *ffcli.Command {
@@ -136,34 +132,33 @@ func testLongRunningProcess() *ffcli.Command {
 	return &ffcli.Command {
 		Name: "testLongRunningProcess",
 		Exec: func(ctx context.Context, args []string) error {
-			// trap Ctrl+C and call cancel on the context
-			ctx, cancel := context.WithCancel(ctx)
-			quit := make(chan os.Signal, 1)
-			signal.Notify(quit, os.Interrupt)
+			c := doRunningProcess(ctx)
 
-			defer func() {
-				signal.Stop(quit)
-				cancel()
-			}()
+			consumer := func () error {
+				for n := range c {
+					fmt.Printf("%d ", n)
+					time.Sleep(500 * time.Millisecond )
+				}
+				return ctx.Err()
+			}
 
-			//funStart := doc.FunManager.Get(doc.EntryAddr)
-			//fmt.Println(funStart.Name, funStart.Address, funStart.Size, funStart.LastAddress())
-			//anal := internal.NewFunctionAnalyzer(doc, funStart)
-			//anal.Process()
-
-			go func() {
-				<-quit
-				cancel()
-			}()
-
-			err := doRunningProcess(ctx)
-			fmt.Println(err)
-
-			return nil
+			return consumer()
 		},
 	}
 }
 
+func testFunAnalyzer(doc *internal.SoraDocument) *ffcli.Command {
+	return &ffcli.Command{
+		Name: "testFunAnalyzer",
+		Exec: func(ctx context.Context, args []string) error {
+			funStart := doc.FunManager.Get(doc.EntryAddr)
+			fmt.Println(funStart.Name, funStart.Address, funStart.Size, funStart.LastAddress())
+			anal := internal.NewFunctionAnalyzer(doc, funStart)
+			anal.Process()
+			return nil
+		},
+	}
+}
 func main() {
 	appName := filepath.Base(os.Args[0])
 
@@ -182,6 +177,20 @@ func main() {
 	defer doc.Delete()
 
 	ctx := context.Background()
+	// trap Ctrl+C and call cancel on the context
+	ctx, cancel := context.WithCancel(ctx)
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, os.Interrupt)
+
+	defer func() {
+		signal.Stop(quit)
+		cancel()
+	}()
+
+	go func() {
+		<-quit
+		cancel()
+	}()
 
 	root := &ffcli.Command{
 		ShortUsage: appName + " [flags] <subcommand>",
@@ -191,6 +200,7 @@ func main() {
 			testDisasm(doc),
 			testLongRunningProcess(),
 			testBBTrace(doc),
+			testFunAnalyzer(doc),
 		},
 		Exec: func(context.Context, []string) error {
 			return flag.ErrHelp
