@@ -110,6 +110,9 @@ type SoraDocument struct {
 	mapNameToFunc map[string][]int
 
 	EntryAddr uint32
+
+	// flags
+	debugMode int
 }
 
 func (doc *SoraDocument) LoadYaml(filename string) error {
@@ -147,6 +150,7 @@ func NewSoraDocument(path string, load_analyzed bool) (*SoraDocument, error) {
 		SymMap:        CreateSymbolMap(),
 		mapAddrToFunc: make(map[uint32]int),
 		mapNameToFunc: make(map[string][]int),
+		debugMode:     0,
 	}
 	bridge.GlobalSetSymbolMap(doc.SymMap.ptr)
 	bridge.GlobalSetGetFuncNameFunc(doc.GetHLEFuncName)
@@ -336,15 +340,25 @@ func (doc *SoraDocument) ProcessBB(start_addr uint32, last_addr uint32, cb BBYie
 }
 
 func (doc *SoraDocument) DebugBB(theBB *SoraBasicBlock, mode string) {
+	if doc.debugMode != 1 {
+		return
+	}
+
 	fmt.Printf("DEBUG: [%s]\n", mode)
 	for addr := theBB.Address; addr <= theBB.LastAddress; addr += 4 {
 		instr := doc.InstrManager.Get(addr)
 		fmt.Print("\t")
 		if instr.Address == theBB.BranchAddress {
-			fmt.Print("* ")
+			fmt.Print("*")
 		} else {
-			fmt.Print("  ")
+			fmt.Print(" ")
 		}
-		fmt.Printf("0x%08x: %s\n", instr.Address, instr.Info.Dizz)
+		if instr.Info.HasDelaySlot {
+			fmt.Print("D")
+		} else {
+			fmt.Print(" ")
+		}
+
+		fmt.Printf(" 0x%08x: %s\n", instr.Address, instr.Info.Dizz)
 	}
 }

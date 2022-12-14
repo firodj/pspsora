@@ -147,11 +147,11 @@ func (bbtrace *BBTraceParser) Parse(ctx context.Context, length int) error {
 	process := func(ctx context.Context, ch chan error) (stop bool, err error) {
 		_, err = bin.Read(buf16)
 		if err != nil {
-			if err != io.EOF {
-				return
+			if err == io.EOF {
+				fmt.Println("INFO:\tstop by EOF")
+				stop = true
+				err = nil
 			}
-			fmt.Println("INFO:\tstop by EOF")
-			stop = true
 			return
 		}
 
@@ -340,7 +340,7 @@ func (bbtrace *BBTraceParser) SetCurrentThread(id uint16) *BBTraceThreadState {
 				PC:          0,
 				Executing:   true,
 				FunGraph:    NewFunGraph(),
-				CallHistory: nil, //NewCallHistory(),
+				CallHistory: nil, // NewCallHistory(), //  nil = DISABLED
 				Stack:       new(Queue[*BBTraceStackItem]),
 			}
 		}
