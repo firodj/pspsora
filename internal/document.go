@@ -340,7 +340,7 @@ func (doc *SoraDocument) ProcessBB(start_addr uint32, last_addr uint32, cb BBYie
 }
 
 func (doc *SoraDocument) DebugBB(theBB *SoraBasicBlock, mode string) {
-	if doc.debugMode != 1 {
+	if doc.Parser.CurrentID != 1 {
 		return
 	}
 

@@ -47,11 +47,21 @@ func testSysCall(doc *internal.SoraDocument) *ffcli.Command {
 }
 
 func testDisasm(doc *internal.SoraDocument) *ffcli.Command {
+	fs := flag.NewFlagSet("testDisasm", flag.ExitOnError)
+	var addr uint = 0
+	fs.UintVar(&addr, "addr", 0, "start address")
+	// 0x08a0e874, 0x08a0e890
 	return &ffcli.Command{
-		Name: "testDisasm",
+		Name:    "testDisasm",
+		FlagSet: fs,
 		Exec: func(ctx context.Context, args []string) error {
-			doc.ProcessBB(0x08a0e874, 0, GetPrintLines(doc))
-			doc.ProcessBB(0x08a0e890, 0, GetPrintLines(doc))
+			if addr == 0 {
+				return errors.New("missing addr")
+			}
+			if doc.Disasm(uint32(addr)) == nil {
+				return errors.New("invalid addr, missing instruction")
+			}
+			doc.ProcessBB(uint32(addr), 0, GetPrintLines(doc))
 			return nil
 		},
 	}
@@ -64,7 +74,11 @@ func GetPrintLines(doc *internal.SoraDocument) internal.BBYieldFunc {
 		var label *string
 		if funStart != 0 {
 			label = doc.SymMap.GetLabelName(funStart)
-			fmt.Println(*label)
+			if label != nil {
+				fmt.Println(*label)
+			} else {
+				fmt.Println("<nil>")
+			}
 		}
 
 		for _, line := range state.Lines {

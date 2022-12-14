@@ -78,7 +78,6 @@ func (funmgr *FunctionManager) Get(addr uint32) *SoraFunction {
 }
 
 func (mgr *FunctionManager) SplitAt(split_addr uint32) (prev_func, split_func *SoraFunction) {
-	fmt.Printf("DEBUG:\tsplit func at 0x%08x\n", split_addr)
 	fn_start := mgr.doc.SymMap.GetFunctionStart(split_addr)
 	funcStart := mgr.Get(split_addr)
 

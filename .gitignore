@@ -2,3 +2,4 @@
 /bridge/bridge.go
 /.vscode
 .DS_Store
+output.txt

@@ -127,6 +127,10 @@ func (bbtrace *BBTraceParser) EndParsing() {
 	}
 }
 
+func isFakeSyscall(pc uint32) bool {
+	return pc >= 0x08000000 && pc < 0x08000040
+}
+
 func (bbtrace *BBTraceParser) Parse(ctx context.Context, length int) error {
 	bin, err := os.Open(bbtrace.filename)
 	if err != nil {
@@ -190,7 +194,7 @@ func (bbtrace *BBTraceParser) Parse(ctx context.Context, length int) error {
 			return
 		}
 
-		fmt.Printf("INFO:\t[%d] read record size=%d\n", cur_ID, size)
+		bbtrace.Log("info", fmt.Sprintf("read record size=%d", size))
 		currentThread := bbtrace.SetCurrentThread(cur_ID)
 
 		if currentThread.CallHistory != nil {
@@ -225,14 +229,14 @@ func (bbtrace *BBTraceParser) Parse(ctx context.Context, length int) error {
 					pc = binary.LittleEndian.Uint32(records[i*4:])
 
 					past_pc := bbtrace.SetCurrentThreadPC(pc)
-					fmt.Printf("INFO:\t[%d] #(%d/%d) KIND_START pc=0x%08x last_pc=0x%08x\n", cur_ID, i-1, size, pc, past_pc)
+					bbtrace.Log("info", fmt.Sprintf("#(%d/%d) KIND_START pc=0x%08x last_pc=0x%08x", i-1, size, pc, past_pc))
 				case KIND_NAME:
 					i++
 					j := i + 8
 					str := records[i*4 : j*4]
 					i = j - 1
 					name := string(str[0:FindFirstNull(str)])
-					fmt.Printf("INFO:\t[%d] #(%d/%d) KIND_NAME name=%s\n", cur_ID, i-8, size, name)
+					bbtrace.Log("info", fmt.Sprintf("#(%d/%d) KIND_NAME name=%s", i-8, size, name))
 					if last_kind == KIND_START {
 						currentThread.Name = name
 
@@ -241,7 +245,7 @@ func (bbtrace *BBTraceParser) Parse(ctx context.Context, length int) error {
 						}
 
 						switch name {
-						case "idle0", "idle1", "SceIoAsync":
+						case "idle1", "SceIoAsync":
 							currentThread.Executing = false
 						}
 					} else {
@@ -250,7 +254,7 @@ func (bbtrace *BBTraceParser) Parse(ctx context.Context, length int) error {
 				case KIND_END:
 					i++
 					end_pc := binary.LittleEndian.Uint32(records[i*4:])
-					fmt.Printf("INFO:\t[%d] #(%d/%d) KIND_END end_pc=0x%08x\n", cur_ID, i-1, size, end_pc)
+					bbtrace.Log("info", fmt.Sprintf("#(%d/%d) KIND_END end_pc=0x%08x", i-1, size, end_pc))
 				default:
 					err = fmt.Errorf("[%d] unknown kind: 0x%04x", cur_ID, kind)
 				}
@@ -261,7 +265,9 @@ func (bbtrace *BBTraceParser) Parse(ctx context.Context, length int) error {
 			i++
 			last_pc = binary.LittleEndian.Uint32(records[i*4:])
 
-			if currentThread.Executing {
+			executing := currentThread.Executing
+
+			if executing {
 				param := BBTraceParam{
 					ID:     bbtrace.CurrentID,
 					Kind:   0,
@@ -277,8 +283,8 @@ func (bbtrace *BBTraceParser) Parse(ctx context.Context, length int) error {
 					break
 				}
 			} else {
-				fmt.Printf("DEBUG:\t[%d] #(%d/%d) skip thread %s (0x%08x, 0x%08x)\n", cur_ID, i-1, size, currentThread.Name,
-					pc, last_pc)
+				bbtrace.Log("debug", fmt.Sprintf("#(%d/%d) skip thread %s (pc:0x%08x, last_pc:0x%08x)\n", i-1, size, currentThread.Name,
+					pc, last_pc))
 			}
 
 			bbtrace.Nts++
@@ -357,6 +363,14 @@ func (bbtrace *BBTraceParser) SetCurrentThreadPC(pc uint32) uint32 {
 	return last_pc
 }
 
+func (bbtrace *BBTraceParser) Log(level string, message string) {
+	if bbtrace.CurrentID != 1 {
+		return
+	}
+
+	fmt.Printf("%s\t[%d] %s\n", level, bbtrace.CurrentID, message)
+}
+
 func (bbtrace *BBTraceParser) ParsingBB(param BBTraceParam) error {
 	if param.ID != bbtrace.CurrentID {
 		panic("assert failed")
@@ -372,6 +386,10 @@ func (bbtrace *BBTraceParser) ParsingBB(param BBTraceParam) error {
 		// Usually start thread doesn't have last_pc
 		bbtrace.OnEnterFunc(theBB, 0)
 		return nil
+	}
+
+	if isFakeSyscall(param.LastPC) && !isFakeSyscall(param.PC) {
+		bbtrace.OnEnterFunc(theBB, param.LastPC)
 	}
 
 	err = bbtrace.OnMergingPastToLast(param.LastPC)
@@ -424,7 +442,7 @@ func (bbtrace *BBTraceParser) EnsureBB(bb_addr uint32) (*SoraBasicBlock, error) 
 			return nil, err
 		}
 		theBB = splitBB
-		fmt.Printf("INFO:\tsplit bb at 0x%08x from original 0x%08x\n", splitBB.Address, prevBB.Address)
+		bbtrace.Log("info", fmt.Sprintf("split bb at 0x%08x from original 0x%08x\n", splitBB.Address, prevBB.Address))
 	}
 
 	return theBB, nil
@@ -443,7 +461,7 @@ func (bbtrace *BBTraceParser) OnEachBB(state BBAnalState) {
 			newBB.BranchAddress = state.BranchAddr
 		}
 	} else if newBB.Address != state.BBAddr {
-		fmt.Printf("ERROR:\tfix me to split bb during OnEachBB at: 0x%08x\n", state.BBAddr)
+		fmt.Printf("ERROR:\t[%d] fix me to split bb during OnEachBB at: 0x%08x\n", bbtrace.CurrentID, state.BBAddr)
 		return
 	}
 }
@@ -469,16 +487,17 @@ func (bbtrace *BBTraceParser) OnEnterFunc(theBB *SoraBasicBlock, ra uint32) {
 	if theFunc == nil {
 		fn_start := bbtrace.doc.SymMap.GetFunctionStart(theBB.Address)
 		if fn_start != 0 {
+			bbtrace.Log("debug", fmt.Sprintf("split func at 0x%08x\n", theBB.Address))
 			theFunc, _ = bbtrace.doc.FunManager.SplitAt(theBB.Address)
 
 			if theFunc == nil {
-				fmt.Printf("ERROR:\tsplit func 0x%08x\n", theBB.Address)
+				bbtrace.Log("error", fmt.Sprintf("split func 0x%08x\n", theBB.Address))
 			}
 		} else {
 			theFunc = bbtrace.doc.FunManager.CreateNewFunction(theBB.Address, theBB.Size())
 
 			if theFunc == nil {
-				fmt.Printf("ERROR:\tunable to create func from bb 0x%08x\n", theBB.Address)
+				bbtrace.Log("error", fmt.Sprintf("unable to create func from bb 0x%08x\n", theBB.Address))
 			}
 		}
 	}
@@ -502,19 +521,37 @@ func (bbtrace *BBTraceParser) OnEnterFunc(theBB *SoraBasicBlock, ra uint32) {
 		currentThread.CallHistory.AddBlock(level, bbtrace.Nts, theBB.Address, theFunc.Name)
 	}
 
-	//fmt.Printf("INFO:\tenter func bb 0x%08x ra=0x%08x", theBB.Address, ra)
-	//if theFunc != nil {
-	//	fmt.Printf(" name=%s", theFunc.Name)
-	//}
-	//fmt.Println()
+	if bbtrace.doc.debugMode == 0 && bbtrace.CurrentID == 1 {
+		msg := fmt.Sprintf("enter func bb 0x%08x ra=0x%08x", theBB.Address, ra)
+		if theFunc != nil {
+			msg += fmt.Sprintf(" name=%s", theFunc.Name)
+		}
+		bbtrace.Log("info", msg)
+	}
+
 	bbtrace.doc.DebugBB(theBB, "enter")
 }
 
 func (bbtrace *BBTraceParser) OnLeaveFunc(theBB *SoraBasicBlock) {
 	currentThread := bbtrace.Threads[bbtrace.CurrentID]
+	level := currentThread.Stack.Len()
+	if level == 0 {
+		bbtrace.Log("debug", "cannot OnLeaveFunc on empty stack")
+		return
+	}
+	past_bb := currentThread.Stack.Top().Address()
+
+	if isFakeSyscall(past_bb) && isFakeSyscall(theBB.Address) {
+		bbtrace.Log("debug", fmt.Sprintf("jr is j past_bb=0x%08x, goto: 0x%08x", past_bb, theBB.BranchAddress))
+		bbtrace.OnContinueNext(theBB)
+		return
+	} else {
+		if bbtrace.CurrentID == 1 {
+			bbtrace.Log("debug", fmt.Sprintf("leaving past_bb=0x%08x, goto: 0x%08x", past_bb, theBB.BranchAddress))
+		}
+	}
 
 	if currentThread.CallHistory != nil {
-		level := currentThread.Stack.Len()
 		currentThread.CallHistory.EndBlock(level, bbtrace.Nts)
 	}
 	_ = currentThread.Stack.Pop()
@@ -523,13 +560,15 @@ func (bbtrace *BBTraceParser) OnLeaveFunc(theBB *SoraBasicBlock) {
 		expected_ra := currentThread.Stack.Top().RA
 
 		if expected_ra != theBB.Address {
-			fmt.Printf("WARNING:\tunexpected ra 0x%08x, expecting 0x%08x\n--- callback? ---\n", theBB.Address, expected_ra)
+			bbtrace.Log("warn", fmt.Sprintf("leave func, expecting RA 0x%08x, but got 0x%08x\t--- callback? ---", expected_ra, theBB.Address))
 
 			bbtrace.OnEnterFunc(theBB, expected_ra)
 		} else {
-			past_bb := currentThread.Stack.Top().Address()
 			currentThread.Stack.Top().SetAddress(theBB)
-			//fmt.Printf("INFO:\tleave bb 0x%08x\n", past_top.Address())
+
+			if bbtrace.doc.debugMode == 0 && bbtrace.CurrentID == 1 {
+				bbtrace.Log("info", fmt.Sprintf("leave func, bb 0x%08x", past_bb))
+			}
 
 			bbtrace.doc.BBManager.CreateReference(past_bb, theBB.Address).SetAdjacent(true)
 
@@ -542,25 +581,43 @@ func (bbtrace *BBTraceParser) OnLeaveFunc(theBB *SoraBasicBlock) {
 		}
 	} else {
 		myFunc := bbtrace.doc.FunManager.Get(theBB.Address)
-		fmt.Printf("INFO:\tend of stack, goto: 0x%08x", theBB.Address)
-		if myFunc != nil {
-			fmt.Printf(" name: %s", myFunc.Name)
-		}
-		fmt.Println()
 
-		bbtrace.doc.DebugBB(theBB, "end")
+		if bbtrace.doc.debugMode == 0 && bbtrace.CurrentID == 1 {
+			msg := fmt.Sprintf("leave func, end of stack, goto: 0x%08x", theBB.Address)
+			if myFunc != nil {
+				msg += fmt.Sprintf(" name: %s", myFunc.Name)
+			}
+			bbtrace.Log("info", msg)
+		}
+
+		if isFakeSyscall(theBB.Address) {
+			bbtrace.OnEnterFunc(theBB, 0)
+		} else {
+			bbtrace.doc.DebugBB(theBB, "end")
+		}
 	}
 }
 
 func (bbtrace *BBTraceParser) OnContinueNext(theBB *SoraBasicBlock) {
 	currentThread := bbtrace.Threads[bbtrace.CurrentID]
-	currentThread.Stack.Top().SetAddress(theBB)
 
+	if currentThread.Stack.Len() == 0 {
+		fmt.Printf("DEBUG:\t[%d] cannnot OnContinueNext on empty stack, bb=%08x\n",
+			bbtrace.CurrentID, theBB.Address)
+		return
+	}
+
+	currentThread.Stack.Top().SetAddress(theBB)
 	bbtrace.doc.DebugBB(theBB, "continue")
 }
 
 func (bbtrace *BBTraceParser) OnMergingPastToLast(last_pc uint32) error {
 	currentThread := bbtrace.Threads[bbtrace.CurrentID]
+
+	if currentThread.Stack.Len() == 0 {
+		fmt.Printf("DEBUG:\t[%d] cannot merge on empty stack, last_pc: 0x%08x\n", bbtrace.CurrentID, last_pc)
+		return nil
+	}
 
 	past_addr := currentThread.Stack.Top().Address()
 
