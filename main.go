@@ -172,6 +172,7 @@ func testFunAnalyzer(doc *internal.SoraDocument) *ffcli.Command {
 		},
 	}
 }
+
 func main() {
 	appName := filepath.Base(os.Args[0])
 
@@ -214,6 +215,7 @@ func main() {
 			testLongRunningProcess(),
 			testBBTrace(doc),
 			testFunAnalyzer(doc),
+			serveCommand(doc),
 		},
 		Exec: func(context.Context, []string) error {
 			return flag.ErrHelp
