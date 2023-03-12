@@ -106,8 +106,8 @@ type SoraDocument struct {
 	// SymbolMap
 	SymMap *SymbolMap
 
-	mapAddrToFunc map[uint32]int
-	mapNameToFunc map[string][]int
+	//mapAddrToFunc map[uint32]int
+	//mapNameToFunc map[string][]int
 
 	EntryAddr uint32
 
@@ -147,10 +147,10 @@ func NewSoraDocument(path string, load_analyzed bool) (*SoraDocument, error) {
 	bb_data := filepath.Join(path, "SoraBBTrace.rec")
 
 	doc := &SoraDocument{
-		SymMap:        CreateSymbolMap(),
-		mapAddrToFunc: make(map[uint32]int),
-		mapNameToFunc: make(map[string][]int),
-		debugMode:     0,
+		SymMap: CreateSymbolMap(),
+		//mapAddrToFunc: make(map[uint32]int),
+		//mapNameToFunc: make(map[string][]int),
+		debugMode: 0,
 	}
 	bridge.GlobalSetSymbolMap(doc.SymMap.ptr)
 	bridge.GlobalSetGetFuncNameFunc(doc.GetHLEFuncName)
@@ -361,4 +361,37 @@ func (doc *SoraDocument) DebugBB(theBB *SoraBasicBlock, mode string) {
 
 		fmt.Printf(" 0x%08x: %s\n", instr.Address, instr.Info.Dizz)
 	}
+}
+
+func (doc *SoraDocument) GetPrintLines(state BBAnalState) {
+	funStart := doc.SymMap.GetFunctionStart(state.BBAddr)
+	var label *string
+	if funStart != 0 {
+		label = doc.SymMap.GetLabelName(funStart)
+		if label != nil {
+			fmt.Printf("%s+0x%x\n", *label, state.BBAddr-funStart)
+		} else {
+			fmt.Println("<nil>")
+		}
+	}
+
+	if state.Visited {
+		fmt.Println("v")
+	}
+
+	for _, line := range state.Lines {
+		if line.Address == state.BranchAddr {
+			fmt.Print("*")
+		} else {
+			fmt.Print(" ")
+		}
+		if line.Address == state.LastAddr {
+			fmt.Print("_")
+		} else {
+			fmt.Print(" ")
+		}
+		fmt.Printf("0x%08x\t%s\n", line.Address, line.Info.Dizz)
+	}
+	//fmt.Printf("last 0x%08x, branch 0x%08x\n", state.LastAddr, state.BranchAddr)
+	fmt.Printf("---\n")
 }

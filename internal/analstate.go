@@ -12,6 +12,7 @@ type BBAnalState struct {
 	LastAddr   uint32
 	Lines      []*SoraInstruction
 	Count      int
+	Visited    bool
 }
 
 func (bbas *BBAnalState) Init() {

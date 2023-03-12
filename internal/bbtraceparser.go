@@ -131,7 +131,7 @@ func isFakeSyscall(pc uint32) bool {
 	return pc >= 0x08000000 && pc < 0x08000040
 }
 
-func (bbtrace *BBTraceParser) Parse(ctx context.Context, length int) error {
+func (bbtrace *BBTraceParser) Parse(ctx context.Context, length uint) error {
 	bin, err := os.Open(bbtrace.filename)
 	if err != nil {
 		return err
@@ -407,13 +407,17 @@ func (bbtrace *BBTraceParser) ParsingBB(param BBTraceParam) error {
 		return fmt.Errorf("unable to get lat Instruction at 0x%08x", lastBB.BranchAddress)
 	}
 
-	bbtrace.doc.BBManager.CreateReference(lastBB.Address, theBB.Address)
+	bbref := bbtrace.doc.BBManager.CreateReference(lastBB.Address, theBB.Address)
 
 	if brInstr.Mnemonic == "jal" || brInstr.Mnemonic == "jalr" {
 		ra := brInstr.Address + 4
 		if brInstr.Info.HasDelaySlot {
 			ra += 4
 		}
+
+		bbtrace.doc.BBManager.CreateReference(lastBB.Address, ra).SetAdjacent(true)
+		bbref.SetLinked(true)
+
 		bbtrace.OnEnterFunc(theBB, ra)
 	} else if brInstr.Mnemonic == "jr" && brInstr.Args[0].Reg == "ra" {
 		bbtrace.OnLeaveFunc(theBB)
@@ -466,6 +470,31 @@ func (bbtrace *BBTraceParser) OnEachBB(state BBAnalState) {
 	}
 }
 
+// CalculateRA, TODO: if OnEnterFunc may receive caller bb, instead ra.
+func (bbtrace *BBTraceParser) CalculateRA(last_bb uint32) (uint32, error) {
+	//last_bb = param.LastPC
+	lastBB := bbtrace.doc.BBManager.Get(last_bb)
+	if lastBB == nil {
+		return 0, fmt.Errorf("unable to get BB 0x%08x", last_bb)
+	}
+
+	brInstr := bbtrace.doc.InstrManager.Get(lastBB.BranchAddress)
+	if brInstr == nil {
+		return 0, fmt.Errorf("unable to get branch instruction at 0x%08x", lastBB.BranchAddress)
+	}
+
+	if brInstr.Mnemonic != "jal" && brInstr.Mnemonic == "jalr" {
+		return 0, fmt.Errorf("branch instruction is not jal/jalr")
+	}
+
+	ra := brInstr.Address + 4
+	if brInstr.Info.HasDelaySlot {
+		ra += 4
+	}
+
+	return ra, nil
+}
+
 func (bbtrace *BBTraceParser) OnEnterFunc(theBB *SoraBasicBlock, ra uint32) {
 	currentThread := bbtrace.Threads[bbtrace.CurrentID]
 	parent_ID := FunGraphNodeID(0)
@@ -507,6 +536,7 @@ func (bbtrace *BBTraceParser) OnEnterFunc(theBB *SoraBasicBlock, ra uint32) {
 	stack_item := NewStackItem(theBB)
 	stack_item.Fun = theFunc
 
+	// FunGraph
 	if currentThread.FunGraph != nil {
 		node := currentThread.FunGraph.AddNode(theBB.Address, parent_ID)
 		node.Fun = theFunc
@@ -516,11 +546,13 @@ func (bbtrace *BBTraceParser) OnEnterFunc(theBB *SoraBasicBlock, ra uint32) {
 
 	currentThread.Stack.Push(stack_item)
 
+	// CallHistory
 	if currentThread.CallHistory != nil {
 		level := currentThread.Stack.Len()
 		currentThread.CallHistory.AddBlock(level, bbtrace.Nts, theBB.Address, theFunc.Name)
 	}
 
+	// Log debug
 	if bbtrace.doc.debugMode == 0 && bbtrace.CurrentID == 1 {
 		msg := fmt.Sprintf("enter func bb 0x%08x ra=0x%08x", theBB.Address, ra)
 		if theFunc != nil {
@@ -557,6 +589,7 @@ func (bbtrace *BBTraceParser) OnLeaveFunc(theBB *SoraBasicBlock) {
 	_ = currentThread.Stack.Pop()
 
 	if currentThread.Stack.Len() > 0 {
+
 		expected_ra := currentThread.Stack.Top().RA
 
 		if expected_ra != theBB.Address {
@@ -564,13 +597,15 @@ func (bbtrace *BBTraceParser) OnLeaveFunc(theBB *SoraBasicBlock) {
 
 			bbtrace.OnEnterFunc(theBB, expected_ra)
 		} else {
+			fmt.Printf("DEBUG:\tOnLeaveFunc expected_ra=0x%x past_bb=0x%x theBB=0x%x\n", expected_ra, past_bb, theBB.Address)
+
 			currentThread.Stack.Top().SetAddress(theBB)
 
 			if bbtrace.doc.debugMode == 0 && bbtrace.CurrentID == 1 {
 				bbtrace.Log("info", fmt.Sprintf("leave func, bb 0x%08x", past_bb))
 			}
 
-			bbtrace.doc.BBManager.CreateReference(past_bb, theBB.Address).SetAdjacent(true)
+			bbtrace.doc.BBManager.CreateReference(past_bb, theBB.Address).SetLinked(true)
 
 			if currentThread.CallHistory != nil {
 				level := currentThread.Stack.Len()

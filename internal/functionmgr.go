@@ -19,7 +19,7 @@ func NewFunctionManager(doc *SoraDocument) *FunctionManager {
 	}
 }
 
-// RegisterExistingFunction got fun from yaml.SymFunctions and store  into analyzed.Functions
+// RegisterExistingFunction got fun from yaml.SymFunctions and store into analyzed.Functions
 func (funmgr *FunctionManager) RegisterExistingFunction(fun *SoraFunction) {
 	funmgr.doc.SymMap.AddFunction(fun.Name, fun.Address, fun.Size, -1)
 	funmgr.CreateNewFunction(fun.Address, fun.Size)
@@ -37,6 +37,17 @@ func (funmgr *FunctionManager) RegisterNameFunction(fun *SoraFunction) {
 	}
 
 	funmgr.mapNameToFunc[fun.Name] = append(funmgr.mapNameToFunc[fun.Name], fun.Address)
+}
+
+func (funmgr *FunctionManager) GetByName(name string) []*SoraFunction {
+	if addrs, ok := funmgr.mapNameToFunc[name]; ok {
+		funs := make([]*SoraFunction, len(addrs))
+		for i, addr := range addrs {
+			funs[i] = funmgr.Get(addr)
+		}
+		return funs
+	}
+	return nil
 }
 
 func (funmgr *FunctionManager) CreateNewFunction(addr uint32, size uint32) *SoraFunction {

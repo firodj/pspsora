@@ -1,4 +1,7 @@
 TARGET=pspsora
 
-run:
-	go build -o ${TARGET} && ./${TARGET}
+run: build
+	./${TARGET}
+
+build:
+	go build -v -o ${TARGET}

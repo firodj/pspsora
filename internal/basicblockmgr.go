@@ -24,15 +24,31 @@ type BBRefKey struct {
 type SoraBBRef struct {
 	BBRefKey
 
-	IsDynamic  bool // immediate or by reg/mem/ptr
+	IsDynamic  bool // TODO: immediate or by reg/mem/ptr
 	IsAdjacent bool // next/prev
 	IsLinked   bool // call/linked
-	IsVisited  bool // by bbtrace
+	IsVisited  bool // TODO: by bbtrace
 }
 
 func (ref *SoraBBRef) SetAdjacent(v bool) *SoraBBRef {
 	ref.IsAdjacent = true
 	return ref
+}
+
+func (ref *SoraBBRef) SetLinked(v bool) *SoraBBRef {
+	ref.IsLinked = true
+	return ref
+}
+
+func (ref *SoraBBRef) String() string {
+	s := fmt.Sprintf("0x%0x -> 0x%x", ref.From, ref.To)
+	if ref.IsAdjacent {
+		s = s + " a"
+	}
+	if ref.IsLinked {
+		s = s + " l"
+	}
+	return s
 }
 
 type BasicBlockManager struct {
@@ -102,23 +118,57 @@ func (bbmanager *BasicBlockManager) Create(addr uint32) *SoraBasicBlock {
 }
 
 func (bbmanager *BasicBlockManager) CreateReference(from_addr, to_addr uint32) *SoraBBRef {
+	bbref := bbmanager.GetRef(from_addr, to_addr)
+	if bbref == nil {
+		key := BBRefKey{
+			From: from_addr,
+			To:   to_addr,
+		}
+
+		bbref = &SoraBBRef{
+			BBRefKey: key,
+		}
+		bbmanager.refsToBB[to_addr] = append(bbmanager.refsToBB[to_addr], from_addr)
+		bbmanager.refsFromBB[from_addr] = append(bbmanager.refsFromBB[from_addr], to_addr)
+		bbmanager.refs[key] = bbref
+	}
+	return bbref
+}
+
+func (bbmanager *BasicBlockManager) GetRef(from_addr, to_addr uint32) *SoraBBRef {
 	key := BBRefKey{
 		From: from_addr,
 		To:   to_addr,
 	}
 
-	if _, ok := bbmanager.refs[key]; ok {
-		return bbmanager.refs[key]
+	if bbref, ok := bbmanager.refs[key]; ok {
+		return bbref
 	}
 
-	bbref := &SoraBBRef{
-		BBRefKey: key,
-	}
-	bbmanager.refsToBB[to_addr] = append(bbmanager.refsToBB[to_addr], from_addr)
-	bbmanager.refsFromBB[from_addr] = append(bbmanager.refsFromBB[from_addr], to_addr)
-	bbmanager.refs[key] = bbref
+	return nil
+}
 
-	return bbref
+func (bbmanager *BasicBlockManager) GetRefs(addr uint32) (xref_froms []*SoraBBRef, xref_tos []*SoraBBRef) {
+	xref_froms = make([]*SoraBBRef, 0)
+	xref_tos = make([]*SoraBBRef, 0)
+
+	if from_bbs_, ok_in := bbmanager.refsToBB[addr]; ok_in {
+		for _, from_bb := range from_bbs_ {
+			if bbref := bbmanager.GetRef(from_bb, addr); bbref != nil {
+				xref_froms = append(xref_froms, bbref)
+			}
+		}
+	}
+
+	if to_bbs, ok_out := bbmanager.refsFromBB[addr]; ok_out {
+		for _, to_bb := range to_bbs {
+			if bbref := bbmanager.GetRef(addr, to_bb); bbref != nil {
+				xref_tos = append(xref_tos, bbref)
+			}
+		}
+	}
+
+	return
 }
 
 func (bbmanager *BasicBlockManager) SplitAt(split_addr uint32) (prev_bb, split_bb *SoraBasicBlock) {

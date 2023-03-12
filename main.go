@@ -61,41 +61,9 @@ func testDisasm(doc *internal.SoraDocument) *ffcli.Command {
 			if doc.Disasm(uint32(addr)) == nil {
 				return errors.New("invalid addr, missing instruction")
 			}
-			doc.ProcessBB(uint32(addr), 0, GetPrintLines(doc))
+			doc.ProcessBB(uint32(addr), 0, doc.GetPrintLines)
 			return nil
 		},
-	}
-
-}
-
-func GetPrintLines(doc *internal.SoraDocument) internal.BBYieldFunc {
-	return func(state internal.BBAnalState) {
-		funStart := doc.SymMap.GetFunctionStart(state.BBAddr)
-		var label *string
-		if funStart != 0 {
-			label = doc.SymMap.GetLabelName(funStart)
-			if label != nil {
-				fmt.Println(*label)
-			} else {
-				fmt.Println("<nil>")
-			}
-		}
-
-		for _, line := range state.Lines {
-			if line.Address == state.BranchAddr {
-				fmt.Print("*")
-			} else {
-				fmt.Print(" ")
-			}
-			if line.Address == state.LastAddr {
-				fmt.Print("_")
-			} else {
-				fmt.Print(" ")
-			}
-			fmt.Printf("0x%08x\t%s\n", line.Address, line.Info.Dizz)
-		}
-		//fmt.Printf("last 0x%08x, branch 0x%08x\n", state.LastAddr, state.BranchAddr)
-		fmt.Printf("---\n")
 	}
 }
 
@@ -126,16 +94,27 @@ func doRunningProcess(ctx context.Context) chan int {
 }
 
 func testBBTrace(doc *internal.SoraDocument) *ffcli.Command {
-	return &ffcli.Command{
-		Name: "testBBTrace",
-		Exec: func(ctx context.Context, args []string) error {
+	fs := flag.NewFlagSet("testBBTrace", flag.ExitOnError)
+	var length uint = 0
+	fs.UintVar(&length, "length", 0, "length trace, 0 =all")
 
-			err := doc.Parser.Parse(ctx, 0)
+	return &ffcli.Command{
+		Name:    "testBBTrace",
+		FlagSet: fs,
+		Exec: func(ctx context.Context, args []string) error {
+			err := doc.Parser.Parse(ctx, length)
 			doc.Parser.DumpAllFunGraph()
 			doc.Parser.DumpAllCallHistory()
 			if err != nil {
 				return err
 			}
+
+			funStart := doc.FunManager.Get(doc.EntryAddr)
+			fmt.Printf("func name=%s addr=0x%x size=%d last=0x%x\n", funStart.Name, funStart.Address, funStart.Size, funStart.LastAddress())
+			anal := internal.NewFunctionAnalyzer(doc, funStart)
+			anal.Process()
+			anal.Debug(doc.GetPrintLines)
+
 			return nil
 		},
 	}
@@ -165,7 +144,7 @@ func testFunAnalyzer(doc *internal.SoraDocument) *ffcli.Command {
 		Name: "testFunAnalyzer",
 		Exec: func(ctx context.Context, args []string) error {
 			funStart := doc.FunManager.Get(doc.EntryAddr)
-			fmt.Println(funStart.Name, funStart.Address, funStart.Size, funStart.LastAddress())
+			fmt.Printf("func name=%s addr=0x%x size=%d last=0x%x\n", funStart.Name, funStart.Address, funStart.Size, funStart.LastAddress())
 			anal := internal.NewFunctionAnalyzer(doc, funStart)
 			anal.Process()
 			return nil
