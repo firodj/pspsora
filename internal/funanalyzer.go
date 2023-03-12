@@ -37,14 +37,13 @@ func (anal *FunctionAnalyzer) Debug(cb BBYieldFunc) {
 		for _, xref_to := range xref_tos {
 			fmt.Printf("  - %s\n", xref_to)
 		}
+		anal.doc.ProcessBB(bb_addr, 0, func(bbas BBAnalState) {
+			if cur_visit, ok := anal.bb_visits[bbas.BBAddr]; ok {
+				bbas.Visited = cur_visit.Visited
+			}
+			cb(bbas)
+		})
 	}
-
-	anal.doc.ProcessBB(anal.fun.Address, anal.fun.LastAddress(), func(bbas BBAnalState) {
-		if cur_visit, ok := anal.bb_visits[bbas.BBAddr]; ok {
-			bbas.Visited = cur_visit.Visited
-		}
-		cb(bbas)
-	})
 
 	/*
 		anal.doc.ProcessBB(fun.Address, fun.LastAddress(), func(bbas BBAnalState) {
@@ -80,7 +79,7 @@ func (anal *FunctionAnalyzer) Process() {
 			if bbfun := anal.doc.FunManager.Get(cur_addr); bbfun == nil {
 				fmt.Printf("WARNING:\tunknown bb (and not a func): 0x08%x\n", cur_addr)
 			} else {
-				fmt.Printf("WARNING:\tunknown bb: 0x08%x\n", cur_addr)
+				fmt.Printf("WARNING:\tbb outisde: 0x08%x\n", cur_addr)
 			}
 			continue
 		}

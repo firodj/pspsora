@@ -597,8 +597,6 @@ func (bbtrace *BBTraceParser) OnLeaveFunc(theBB *SoraBasicBlock) {
 
 			bbtrace.OnEnterFunc(theBB, expected_ra)
 		} else {
-			fmt.Printf("DEBUG:\tOnLeaveFunc expected_ra=0x%x past_bb=0x%x theBB=0x%x\n", expected_ra, past_bb, theBB.Address)
-
 			currentThread.Stack.Top().SetAddress(theBB)
 
 			if bbtrace.doc.debugMode == 0 && bbtrace.CurrentID == 1 {

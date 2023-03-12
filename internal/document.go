@@ -302,6 +302,11 @@ func (doc *SoraDocument) ProcessBB(start_addr uint32, last_addr uint32, cb BBYie
 	var bbas BBAnalState
 	bbas.Init()
 	var prevInstr *SoraInstruction = nil
+	bb_exists := doc.BBManager.Get(start_addr)
+	if bb_exists != nil {
+		fmt.Printf("WARNING:\toverwrite last_addr because ProcessBB exists on 0x%08x\n", bb_exists.Address)
+		last_addr = bb_exists.LastAddress
+	}
 
 	for addr := start_addr; last_addr == 0 || addr <= last_addr; addr += 4 {
 		bbas.SetBB(addr)
