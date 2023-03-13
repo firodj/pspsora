@@ -11,40 +11,9 @@ import (
 	"runtime"
 	"time"
 
-	"github.com/davecgh/go-spew/spew"
 	"github.com/firodj/pspsora/internal"
 	"github.com/peterbourgon/ff/v3/ffcli"
 )
-
-func testSysCall(doc *internal.SoraDocument) *ffcli.Command {
-	return &ffcli.Command{
-		Name: "testSysCall",
-		Exec: func(ctx context.Context, args []string) error {
-			entryName := doc.SymMap.GetLabelName(doc.EntryAddr)
-			fmt.Println(doc.EntryAddr)
-			if entryName != nil {
-				fmt.Println(*entryName)
-			}
-
-			instr := doc.Disasm(doc.EntryAddr)
-			fmt.Println(instr.Info.Dizz)
-			spew.Dump(doc.ParseDizz(instr.Info.Dizz))
-
-			instr = doc.Disasm(0x8A38A70)
-			fmt.Println(instr.Info.Dizz)
-			spew.Dump(doc.ParseDizz(instr.Info.Dizz))
-
-			instr = doc.Disasm(0x8A38A74)
-			fmt.Println(instr.Info.Dizz)
-			spew.Dump(doc.ParseDizz(instr.Info.Dizz))
-
-			instr = doc.Disasm(0x8804140)
-			fmt.Println(instr.Info.Dizz)
-			spew.Dump(doc.ParseDizz(instr.Info.Dizz))
-			return nil
-		},
-	}
-}
 
 func testDisasm(doc *internal.SoraDocument) *ffcli.Command {
 	fs := flag.NewFlagSet("testDisasm", flag.ExitOnError)
@@ -189,7 +158,6 @@ func main() {
 		ShortUsage: appName + " [flags] <subcommand>",
 		FlagSet:    rootFlagSet,
 		Subcommands: []*ffcli.Command{
-			testSysCall(doc),
 			testDisasm(doc),
 			testLongRunningProcess(),
 			testBBTrace(doc),

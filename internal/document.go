@@ -106,9 +106,6 @@ type SoraDocument struct {
 	// SymbolMap
 	SymMap *SymbolMap
 
-	//mapAddrToFunc map[uint32]int
-	//mapNameToFunc map[string][]int
-
 	EntryAddr uint32
 
 	// flags
@@ -141,23 +138,41 @@ func (doc *SoraDocument) LoadMemory(filename string) error {
 	return nil
 }
 
+func newSoraDocument() *SoraDocument {
+	doc := &SoraDocument{
+		SymMap:    CreateSymbolMap(),
+		debugMode: 0,
+	}
+	bridge.GlobalSetSymbolMap(doc.SymMap.ptr)
+	bridge.GlobalSetGetFuncNameFunc(doc.GetHLEFuncName)
+
+	doc.Parser = NewBBTraceParser(doc)
+	doc.BBManager = NewBasicBlockManager(doc)
+	doc.FunManager = NewFunctionManager(doc)
+	doc.InstrManager = NewInstructionManager(doc)
+
+	return doc
+}
+
 func NewSoraDocument(path string, load_analyzed bool) (*SoraDocument, error) {
 	main_yaml := filepath.Join(path, "Sora.yaml")
 	main_data := filepath.Join(path, "SoraMemory.bin")
 	bb_data := filepath.Join(path, "SoraBBTrace.rec")
 
+	doc := newSoraDocument()
+	/**
 	doc := &SoraDocument{
-		SymMap: CreateSymbolMap(),
-		//mapAddrToFunc: make(map[uint32]int),
-		//mapNameToFunc: make(map[string][]int),
+		SymMap:    CreateSymbolMap(),
 		debugMode: 0,
 	}
 	bridge.GlobalSetSymbolMap(doc.SymMap.ptr)
 	bridge.GlobalSetGetFuncNameFunc(doc.GetHLEFuncName)
-	doc.Parser = NewBBTraceParser(doc, bb_data)
+	doc.Parser = NewBBTraceParser(doc)
 	doc.BBManager = NewBasicBlockManager(doc)
 	doc.FunManager = NewFunctionManager(doc)
 	doc.InstrManager = NewInstructionManager(doc)
+	**/
+	doc.Parser.setFilename(bb_data)
 
 	err := doc.LoadYaml(main_yaml)
 	if err != nil {
@@ -216,16 +231,18 @@ func (doc *SoraDocument) Disasm(address uint32) *SoraInstruction {
 	mnemonic, args := doc.ParseDizz(instr.Info.Dizz)
 	instr.Mnemonic = mnemonic
 	instr.Args = args
+
 	return instr
 }
 
 type SoraArgType string
 
 const (
-	ArgNone SoraArgType = ""
-	ArgImm  SoraArgType = "imm"
-	ArgReg  SoraArgType = "reg"
-	ArgMem  SoraArgType = "mem"
+	ArgNone    SoraArgType = ""
+	ArgImm     SoraArgType = "imm"
+	ArgReg     SoraArgType = "reg"
+	ArgMem     SoraArgType = "mem"
+	ArgUnknown SoraArgType = "unk"
 )
 
 type SoraArgument struct {
@@ -290,7 +307,14 @@ func (doc *SoraDocument) ParseDizz(dizz string) (mnemonic string, arguments []*S
 	for _, param := range params[1:] {
 		argz := strings.Split(param, ",")
 		for _, a := range argz {
-			var arg *SoraArgument = NewSoraArgument(a, doc.SymMap.GetLabelName)
+			var arg *SoraArgument = NewSoraArgument(strings.TrimSpace(a), doc.SymMap.GetLabelName)
+
+			// Fixup for syscall argument
+			if mnemonic == "syscall" {
+				arg.Type = ArgUnknown
+				arg.Label = arg.Reg
+				arg.Reg = ""
+			}
 			arguments = append(arguments, arg)
 		}
 	}
@@ -395,7 +419,22 @@ func (doc *SoraDocument) GetPrintLines(state BBAnalState) {
 		} else {
 			fmt.Print(" ")
 		}
-		fmt.Printf("0x%08x\t%s\n", line.Address, line.Info.Dizz)
+
+		fmt.Printf("0x%08x\t%s", line.Address, line.Info.Dizz)
+		for _, arg := range line.Args {
+			if arg.IsCodeLocation {
+				if funTarget := doc.SymMap.GetFunctionStart(uint32(arg.ValOfs)); funTarget != 0 {
+					label = doc.SymMap.GetLabelName(funTarget)
+					if label != nil {
+						fmt.Printf("\t; %s+0x%x\n", *label, uint32(arg.ValOfs)-funTarget)
+					}
+				}
+			}
+		}
+
+		fmt.Print(Code(line))
+
+		fmt.Println()
 	}
 	//fmt.Printf("last 0x%08x, branch 0x%08x\n", state.LastAddr, state.BranchAddr)
 	fmt.Printf("---\n")

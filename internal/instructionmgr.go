@@ -43,3 +43,14 @@ func (mgr *InstructionManager) Get(addr uint32) *SoraInstruction {
 	}
 	return it.Value()
 }
+
+func (instr *SoraInstruction) GetSyscallInfo() (int, int) {
+	if instr.Mnemonic == "syscall" {
+		// Syscalls look like this: 00-- ---- ---- xxxx vvvv vv00 1100
+		callno := (instr.Info.Encoded >> 6) & 0xFFFFF
+		funcnum := callno & 0xFFF
+		modulenum := (callno & 0xFF000) >> 12
+		return int(modulenum), int(funcnum)
+	}
+	return -1, -1
+}

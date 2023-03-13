@@ -75,15 +75,18 @@ type BBTraceParser struct {
 	Threads   map[uint16]*BBTraceThreadState
 }
 
-func NewBBTraceParser(doc *SoraDocument, filename string) *BBTraceParser {
+func NewBBTraceParser(doc *SoraDocument) *BBTraceParser {
 	bbtrace := &BBTraceParser{
 		doc:       doc,
-		filename:  filename,
 		CurrentID: 0,
 		Nts:       0,
 		Fts:       0,
 	}
 	return bbtrace
+}
+
+func (bbtrace *BBTraceParser) setFilename(filename string) {
+	bbtrace.filename = filename
 }
 
 func FindFirstNull(b []byte) int {
