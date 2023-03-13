@@ -160,18 +160,6 @@ func NewSoraDocument(path string, load_analyzed bool) (*SoraDocument, error) {
 	bb_data := filepath.Join(path, "SoraBBTrace.rec")
 
 	doc := newSoraDocument()
-	/**
-	doc := &SoraDocument{
-		SymMap:    CreateSymbolMap(),
-		debugMode: 0,
-	}
-	bridge.GlobalSetSymbolMap(doc.SymMap.ptr)
-	bridge.GlobalSetGetFuncNameFunc(doc.GetHLEFuncName)
-	doc.Parser = NewBBTraceParser(doc)
-	doc.BBManager = NewBasicBlockManager(doc)
-	doc.FunManager = NewFunctionManager(doc)
-	doc.InstrManager = NewInstructionManager(doc)
-	**/
 	doc.Parser.setFilename(bb_data)
 
 	err := doc.LoadYaml(main_yaml)
@@ -235,71 +223,6 @@ func (doc *SoraDocument) Disasm(address uint32) *SoraInstruction {
 	return instr
 }
 
-type SoraArgType string
-
-const (
-	ArgNone    SoraArgType = ""
-	ArgImm     SoraArgType = "imm"
-	ArgReg     SoraArgType = "reg"
-	ArgMem     SoraArgType = "mem"
-	ArgUnknown SoraArgType = "unk"
-)
-
-type SoraArgument struct {
-	Type           SoraArgType
-	Label          string
-	ValOfs         int
-	Reg            string
-	IsCodeLocation bool
-}
-
-func NewSoraArgument(opr string, labellookup func(uint32) *string) (arg *SoraArgument) {
-	if len(opr) == 2 {
-		return &SoraArgument{
-			Type: ArgReg,
-			Reg:  opr,
-		}
-	}
-
-	arg = &SoraArgument{}
-
-	lookup := false
-	if strings.HasPrefix(opr, "->$") {
-		opr = "0x" + opr[3:]
-		arg.IsCodeLocation = true
-		lookup = true
-	} else if strings.HasPrefix(opr, "->") {
-		opr = opr[2:]
-		arg.IsCodeLocation = true
-	}
-
-	var imm int
-	var rs string
-
-	n, _ := fmt.Sscanf(opr, "%v(%s)", &imm, &rs)
-	if n >= 1 {
-		arg.Type = ArgImm
-		arg.ValOfs = imm
-		if n >= 2 {
-			arg.Type = ArgMem
-			arg.Reg = rs[:len(rs)-1]
-		}
-	} else {
-		arg.Type = ArgReg
-		arg.Reg = opr
-	}
-
-	if lookup {
-		if labellookup != nil {
-			label := labellookup(uint32(arg.ValOfs))
-			if label != nil {
-				arg.Label = *label
-			}
-		}
-	}
-	return
-}
-
 func (doc *SoraDocument) ParseDizz(dizz string) (mnemonic string, arguments []*SoraArgument) {
 	params := strings.Split(dizz, "\t")
 	mnemonic = params[0]
@@ -328,7 +251,7 @@ func (doc *SoraDocument) ProcessBB(start_addr uint32, last_addr uint32, cb BBYie
 	var prevInstr *SoraInstruction = nil
 	bb_exists := doc.BBManager.Get(start_addr)
 	if bb_exists != nil {
-		fmt.Printf("WARNING:\toverwrite last_addr because ProcessBB exists on 0x%08x\n", bb_exists.Address)
+		//fmt.Printf("WARNING:\toverwrite last_addr because ProcessBB exists on 0x%08x\n", bb_exists.Address)
 		last_addr = bb_exists.LastAddress
 	}
 
@@ -398,14 +321,16 @@ func (doc *SoraDocument) GetPrintLines(state BBAnalState) {
 	if funStart != 0 {
 		label = doc.SymMap.GetLabelName(funStart)
 		if label != nil {
-			fmt.Printf("%s+0x%x\n", *label, state.BBAddr-funStart)
+			fmt.Printf("%s+0x%x:", *label, state.BBAddr-funStart)
 		} else {
-			fmt.Println("<nil>")
+			fmt.Print("<nil>:")
 		}
 	}
 
 	if state.Visited {
-		fmt.Println("v")
+		fmt.Println("\tv")
+	} else {
+		fmt.Println()
 	}
 
 	for _, line := range state.Lines {
@@ -426,7 +351,7 @@ func (doc *SoraDocument) GetPrintLines(state BBAnalState) {
 				if funTarget := doc.SymMap.GetFunctionStart(uint32(arg.ValOfs)); funTarget != 0 {
 					label = doc.SymMap.GetLabelName(funTarget)
 					if label != nil {
-						fmt.Printf("\t; %s+0x%x\n", *label, uint32(arg.ValOfs)-funTarget)
+						fmt.Printf("\t; %s+0x%x", *label, uint32(arg.ValOfs)-funTarget)
 					}
 				}
 			}
@@ -437,5 +362,5 @@ func (doc *SoraDocument) GetPrintLines(state BBAnalState) {
 		fmt.Println()
 	}
 	//fmt.Printf("last 0x%08x, branch 0x%08x\n", state.LastAddr, state.BranchAddr)
-	fmt.Printf("---\n")
+	//fmt.Printf("---\n")
 }

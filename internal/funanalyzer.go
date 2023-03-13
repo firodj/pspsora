@@ -24,35 +24,26 @@ type BBVisit struct {
 
 func (anal *FunctionAnalyzer) Debug(cb BBYieldFunc) {
 	for _, bb_addr := range anal.fun.BBAddresses {
-		v := false
-		if cur_visit, ok := anal.bb_visits[bb_addr]; ok {
-			v = cur_visit.Visited
-		}
-		fmt.Printf("bb 0x%x %v\n", bb_addr, v)
 		anal.doc.BBManager.Get(bb_addr)
+
+		fmt.Printf("----\n  xrefs from:\n")
 		xref_froms, xref_tos := anal.doc.BBManager.GetRefs(bb_addr)
 		for _, xref_from := range xref_froms {
 			fmt.Printf("  - %s\n", xref_from)
 		}
-		for _, xref_to := range xref_tos {
-			fmt.Printf("  - %s\n", xref_to)
-		}
+
 		anal.doc.ProcessBB(bb_addr, 0, func(bbas BBAnalState) {
 			if cur_visit, ok := anal.bb_visits[bbas.BBAddr]; ok {
 				bbas.Visited = cur_visit.Visited
 			}
 			cb(bbas)
 		})
-	}
 
-	/*
-		anal.doc.ProcessBB(fun.Address, fun.LastAddress(), func(bbas BBAnalState) {
-			fmt.Printf("bb:0x%08x br:0x%08x last_addr:0x%08x\n", bbas.BBAddr, bbas.BranchAddr, bbas.LastAddr)
-			for _, line := range bbas.Lines {
-				fmt.Printf("\t0x%08x %s\n", line.Address, line.Dizz)
-			}
-		})
-		**/
+		fmt.Printf("  xrefs to:\n")
+		for _, xref_to := range xref_tos {
+			fmt.Printf("  - %s\n", xref_to)
+		}
+	}
 }
 
 func (anal *FunctionAnalyzer) Process() {
@@ -89,8 +80,6 @@ func (anal *FunctionAnalyzer) Process() {
 			continue
 		}
 		cur_visit.Visited = true
-
-		fmt.Println("---")
 
 		_, outfrom_bb := anal.doc.BBManager.GetRefs(cur_addr)
 		for _, xref_to_bb := range outfrom_bb {
