@@ -196,3 +196,11 @@ func MIPSAnalystGetOpcodeInfo(address uint32) *models.MipsOpcode {
   }
 }
 
+func MIPSDebugInterface_GetRegName(cat int, index int) *string {
+	cstr := C.MIPSDebugInterface_GetRegName(C.int(cat), C.int(index))
+	if cstr == nil {
+		return nil
+	}
+	str := C.GoString(cstr)
+	return &str
+}

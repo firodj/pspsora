@@ -186,11 +186,23 @@ func NewSoraDocument(path string, load_analyzed bool) (*SoraDocument, error) {
 	return doc, err
 }
 
-func (doc *SoraDocument) GetHLEFuncName(moduleIndex int, funcIndex int) string {
+func (doc *SoraDocument) GetHLE(moduleIndex int, funcIndex int) (*PSPHLEModule, *PSPHLEFunction) {
 	if moduleIndex < len(doc.yaml.HLEModules) {
 		modl := &doc.yaml.HLEModules[moduleIndex]
 		if funcIndex < len(modl.Funcs) {
 			fun := &modl.Funcs[funcIndex]
+			return modl, fun
+		}
+		return modl, nil
+	}
+	return nil, nil
+}
+
+func (doc *SoraDocument) GetHLEFuncName(moduleIndex int, funcIndex int) string {
+	modl, fun := doc.GetHLE(moduleIndex, funcIndex)
+
+	if modl != nil {
+		if fun != nil {
 			return fmt.Sprintf("%s::%s", modl.Name, fun.Name)
 		} else {
 			return fmt.Sprintf("%s::func%x", modl.Name, funcIndex)
@@ -306,6 +318,14 @@ func (doc *SoraDocument) DebugBB(theBB *SoraBasicBlock, mode string) {
 
 		fmt.Printf(" 0x%08x: %s\n", instr.Address, instr.Info.Dizz)
 	}
+}
+
+func (doc *SoraDocument) GetRegName(cat int, index int) string {
+	regname := bridge.MIPSDebugInterface_GetRegName(cat, index)
+	if regname != nil {
+		return *regname
+	}
+	return ""
 }
 
 func (doc *SoraDocument) GetPrintLines(state BBAnalState) {

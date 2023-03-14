@@ -1,5 +1,10 @@
 package internal
 
+import (
+	"fmt"
+	"strconv"
+)
+
 type PseudoPrint func(instr *SoraInstruction, doc *SoraDocument) string
 
 var mnemonicToPseudo map[string]PseudoPrint = map[string]PseudoPrint{
@@ -177,10 +182,56 @@ func PseudoStore(instr *SoraInstruction, doc *SoraDocument) string {
 	return "\t; " + ss
 }
 
+var maskToType map[byte]string = map[byte]string{
+	'v': "void",
+	'x': "u32",
+	'i': "int",
+	'f': "float",
+	'X': "u64",
+	'I': "int64",
+	'F': "double",
+	's': "const char*",
+	'p': "(u32*)",
+}
+
 func PseudoSyscall(instr *SoraInstruction, doc *SoraDocument) string {
 	moduleIndex, funcIndex := instr.GetSyscallNumber()
-	ss := doc.GetHLEFuncName(moduleIndex, funcIndex)
-	ss += "(...)"
+
+	ss := ""
+
+	_, fun := doc.GetHLE(moduleIndex, funcIndex)
+	if fun != nil {
+
+		if len(fun.RetMask) > 0 {
+			ss += "v0 = (" + maskToType[fun.RetMask[0]] + ")"
+		}
+
+		ss += doc.GetHLEFuncName(moduleIndex, funcIndex) + "("
+		for arg_i := range fun.ArgMask {
+			if arg_i > 0 {
+				ss += ", "
+			}
+			ss += "(" + maskToType[fun.ArgMask[arg_i]] + ")" + doc.GetRegName(0, 4+arg_i)
+		}
+
+		for ret_i := range fun.RetMask {
+			if ret_i == 0 {
+				continue
+			}
+
+			if ret_i > 1 {
+				ss += ", "
+			}
+			ss += "(*" + maskToType[fun.RetMask[ret_i]] + ")&v" + strconv.Itoa(ret_i)
+		}
+
+		ss += ")"
+		// 0
+	} else {
+		ss = fmt.Sprintf("m0x%02x::f0x%03x()", moduleIndex, funcIndex)
+		// -1
+	}
+
 	return "\t; " + ss
 }
 
