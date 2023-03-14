@@ -84,6 +84,11 @@ func testBBTrace(doc *internal.SoraDocument) *ffcli.Command {
 			anal.Process()
 			anal.Debug(doc.GetPrintLines)
 
+			funImport := doc.FunManager.Get(0x08a38a70)
+			anal2 := internal.NewFunctionAnalyzer(doc, funImport)
+			anal2.Process()
+			anal2.Debug(doc.GetPrintLines)
+
 			return nil
 		},
 	}

@@ -8,11 +8,10 @@ import (
 type SoraArgType string
 
 const (
-	ArgNone    SoraArgType = ""
-	ArgImm     SoraArgType = "imm"
-	ArgReg     SoraArgType = "reg"
-	ArgMem     SoraArgType = "mem"
-	ArgUnknown SoraArgType = "unk"
+	ArgNone SoraArgType = ""
+	ArgImm  SoraArgType = "imm"
+	ArgReg  SoraArgType = "reg"
+	ArgMem  SoraArgType = "mem"
 )
 
 type SoraArgument struct {

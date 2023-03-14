@@ -38,14 +38,14 @@ func TestParseDizz(t *testing.T) {
 	})
 
 	t.Run("when syscall", func(t *testing.T) {
-		dizz := "syscall\tSysMemUserForUser::sceKernelSetCompiledSdkVersion380_390"
+		dizz := "syscall\t0x05009"
 		m, args := doc.ParseDizz(dizz)
 
 		assert.Equal(t, "syscall", m)
 		assert.Len(t, args, 1)
 
-		assert.Equal(t, ArgUnknown, args[0].Type)
-		assert.Equal(t, "SysMemUserForUser::sceKernelSetCompiledSdkVersion380_390", args[0].Label)
+		assert.Equal(t, ArgImm, args[0].Type)
+		assert.Equal(t, 0x05009, args[0].ValOfs)
 	})
 
 	t.Run("when jal tgt", func(t *testing.T) {

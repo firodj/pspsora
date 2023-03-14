@@ -231,13 +231,6 @@ func (doc *SoraDocument) ParseDizz(dizz string) (mnemonic string, arguments []*S
 		argz := strings.Split(param, ",")
 		for _, a := range argz {
 			var arg *SoraArgument = NewSoraArgument(strings.TrimSpace(a), doc.SymMap.GetLabelName)
-
-			// Fixup for syscall argument
-			if mnemonic == "syscall" {
-				arg.Type = ArgUnknown
-				arg.Label = arg.Reg
-				arg.Reg = ""
-			}
 			arguments = append(arguments, arg)
 		}
 	}
@@ -346,6 +339,7 @@ func (doc *SoraDocument) GetPrintLines(state BBAnalState) {
 		}
 
 		fmt.Printf("0x%08x\t%s", line.Address, line.Info.Dizz)
+
 		for _, arg := range line.Args {
 			if arg.IsCodeLocation {
 				if funTarget := doc.SymMap.GetFunctionStart(uint32(arg.ValOfs)); funTarget != 0 {
@@ -357,7 +351,7 @@ func (doc *SoraDocument) GetPrintLines(state BBAnalState) {
 			}
 		}
 
-		fmt.Print(Code(line))
+		fmt.Print(Code(line, doc))
 
 		fmt.Println()
 	}

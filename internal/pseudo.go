@@ -1,8 +1,9 @@
 package internal
 
-type PseudoPrint func(instr *SoraInstruction) string
+type PseudoPrint func(instr *SoraInstruction, doc *SoraDocument) string
 
 var mnemonicToPseudo map[string]PseudoPrint = map[string]PseudoPrint{
+	"nop":   PseudoNothing,
 	"addiu": PseudoAssign,
 	"addu":  PseudoAssign,
 	"subu":  PseudoAssign,
@@ -20,17 +21,43 @@ var mnemonicToPseudo map[string]PseudoPrint = map[string]PseudoPrint{
 	"sra":   PseudoAssign,
 	"srl":   PseudoAssign,
 
-	"li": PseudoAssign,
+	"li":  PseudoAssign,
+	"lui": PseudoLoadUpper,
+	"lw":  PseudoLoad,
+	"bu":  PseudoLoad,
+
+	"sw": PseudoStore,
+	"sb": PseudoStore,
+	"sh": PseudoStore,
+
+	"beq":  PseudoJump,
+	"beql": PseudoJump,
+	"bne":  PseudoJump,
+	"bnel": PseudoJump,
+	"blez": PseudoJump,
+	"bgtz": PseudoJump,
+	"bltz": PseudoJump,
+	"bgez": PseudoJump,
+
+	"jr":  PseudoJump,
+	"j":   PseudoJump,
+	"jal": PseudoJump,
+
+	"syscall": PseudoSyscall,
 }
 
-func Code(instr *SoraInstruction) string {
+func Code(instr *SoraInstruction, doc *SoraDocument) string {
 	if fn, ok := mnemonicToPseudo[instr.Mnemonic]; ok {
-		return fn(instr)
+		return fn(instr, doc)
 	}
 	return ""
 }
 
-func PseudoAssign(instr *SoraInstruction) string {
+func PseudoNothing(instr *SoraInstruction, doc *SoraDocument) string {
+	return "\t//"
+}
+
+func PseudoAssign(instr *SoraInstruction, doc *SoraDocument) string {
 	op := ""
 	arg2_is_dec := false
 	arg1_signed := false
@@ -96,4 +123,67 @@ func PseudoAssign(instr *SoraInstruction) string {
 	}
 
 	return "\t; " + s
+}
+
+func PseudoLoadUpper(instr *SoraInstruction, doc *SoraDocument) string {
+	ss := instr.Args[0].Str(false) + " = " + instr.Args[1].Str(false)
+
+	//if instr.Args[1].IsZero() {
+	//}
+
+	if instr.Args[1].IsNumber() {
+		ss += "0000"
+	} else {
+		ss += " << 16"
+	}
+
+	return "\t; " + ss
+}
+
+func PseudoLoad(instr *SoraInstruction, doc *SoraDocument) string {
+	suffix := instr.Mnemonic[1:]
+	sz := ""
+	mask := ""
+
+	if suffix == "w" {
+		sz = "u32"
+	} else if suffix == "bu" {
+		sz = "u8"
+		mask = " & 0xff"
+	} else {
+		panic("unknown suffix")
+	}
+
+	ss := instr.Args[0].Str(false) + " = (" + sz + ")" + instr.Args[1].Str(false)
+	if mask != "" {
+		ss += mask
+	}
+
+	return "\t; " + ss
+}
+
+func PseudoStore(instr *SoraInstruction, doc *SoraDocument) string {
+	sz := ""
+	suffix := instr.Mnemonic[1:]
+	if suffix == "b" {
+		sz = "u8"
+	} else if suffix == "h" {
+		sz = "u16"
+	} else if suffix == "w" {
+		sz = "u32"
+	}
+
+	ss := "(" + sz + ")" + instr.Args[1].Str(false) + " = " + instr.Args[0].Str(false)
+	return "\t; " + ss
+}
+
+func PseudoSyscall(instr *SoraInstruction, doc *SoraDocument) string {
+	moduleIndex, funcIndex := instr.GetSyscallNumber()
+	ss := doc.GetHLEFuncName(moduleIndex, funcIndex)
+	ss += "(...)"
+	return "\t; " + ss
+}
+
+func PseudoJump(instr *SoraInstruction, doc *SoraDocument) string {
+	return "\t; TODO"
 }
