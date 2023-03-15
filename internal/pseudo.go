@@ -5,64 +5,72 @@ import (
 	"strconv"
 )
 
-type PseudoPrint func(instr *SoraInstruction, doc *SoraDocument) string
+type PseudoPrint func(instr *SoraInstruction, doc *SoraDocument) (string, int)
 
-var mnemonicToPseudo map[string]PseudoPrint = map[string]PseudoPrint{
-	"nop":   PseudoNothing,
-	"addiu": PseudoAssign,
-	"addu":  PseudoAssign,
-	"subu":  PseudoAssign,
+var mnemonicToPseudo map[string]PseudoPrint
 
-	"move":  PseudoAssign,
-	"andi":  PseudoAssign,
-	"ori":   PseudoAssign,
-	"or":    PseudoAssign,
-	"xor":   PseudoAssign,
-	"sll":   PseudoAssign,
-	"sltiu": PseudoAssign,
-	"slti":  PseudoAssign,
-	"sltu":  PseudoAssign,
-	"slt":   PseudoAssign,
-	"sra":   PseudoAssign,
-	"srl":   PseudoAssign,
+func init() {
+	mnemonicToPseudo = map[string]PseudoPrint{
+		"nop":   PseudoNothing,
+		"addiu": PseudoAssign,
+		"addu":  PseudoAssign,
+		"subu":  PseudoAssign,
 
-	"li":  PseudoAssign,
-	"lui": PseudoLoadUpper,
-	"lw":  PseudoLoad,
-	"bu":  PseudoLoad,
+		"move":  PseudoAssign,
+		"andi":  PseudoAssign,
+		"ori":   PseudoAssign,
+		"or":    PseudoAssign,
+		"xor":   PseudoAssign,
+		"sll":   PseudoAssign,
+		"sltiu": PseudoAssign,
+		"slti":  PseudoAssign,
+		"sltu":  PseudoAssign,
+		"slt":   PseudoAssign,
+		"sra":   PseudoAssign,
+		"srl":   PseudoAssign,
 
-	"sw": PseudoStore,
-	"sb": PseudoStore,
-	"sh": PseudoStore,
+		"li":  PseudoAssign,
+		"lui": PseudoLoadUpper,
+		"lw":  PseudoLoad,
+		"bu":  PseudoLoad,
 
-	"beq":  PseudoJump,
-	"beql": PseudoJump,
-	"bne":  PseudoJump,
-	"bnel": PseudoJump,
-	"blez": PseudoJump,
-	"bgtz": PseudoJump,
-	"bltz": PseudoJump,
-	"bgez": PseudoJump,
+		"sw": PseudoStore,
+		"sb": PseudoStore,
+		"sh": PseudoStore,
 
-	"jr":  PseudoJump,
-	"j":   PseudoJump,
-	"jal": PseudoJump,
+		"beq":  PseudoJump,
+		"beql": PseudoJump,
+		"bne":  PseudoJump,
+		"bnel": PseudoJump,
+		"blez": PseudoJump,
+		"bgtz": PseudoJump,
+		"bltz": PseudoJump,
+		"bgez": PseudoJump,
 
-	"syscall": PseudoSyscall,
+		"jr":  PseudoJump,
+		"j":   PseudoJump,
+		"jal": PseudoJump,
+
+		"syscall": PseudoSyscall,
+	}
 }
 
-func Code(instr *SoraInstruction, doc *SoraDocument) string {
+// return
+//   - 0: ok,
+//   - -1: unimplemented,
+//   - 1: skip delay shot.
+func Code(instr *SoraInstruction, doc *SoraDocument) (string, int) {
 	if fn, ok := mnemonicToPseudo[instr.Mnemonic]; ok {
 		return fn(instr, doc)
 	}
-	return ""
+	return "", -1
 }
 
-func PseudoNothing(instr *SoraInstruction, doc *SoraDocument) string {
-	return "\t//"
+func PseudoNothing(instr *SoraInstruction, doc *SoraDocument) (string, int) {
+	return "// nop", 0
 }
 
-func PseudoAssign(instr *SoraInstruction, doc *SoraDocument) string {
+func PseudoAssign(instr *SoraInstruction, doc *SoraDocument) (string, int) {
 	op := ""
 	arg2_is_dec := false
 	arg1_signed := false
@@ -108,29 +116,29 @@ func PseudoAssign(instr *SoraInstruction, doc *SoraDocument) string {
 		panic("invalid number of argument")
 	}
 
-	s := instr.Args[0].Str(false) + " = "
+	ss := instr.Args[0].Str(false) + " = "
 
 	if arg1_signed {
-		s += "(s32)"
+		ss += "(s32)"
 	}
-	s += instr.Args[1].Str(false)
+	ss += instr.Args[1].Str(false)
 
 	if len(instr.Args) > 2 && !instr.Args[2].IsZero() {
 		if op != "" {
-			s += " " + op
+			ss += " " + op
 		}
 
-		s += " "
+		ss += " "
 		if arg2_signed {
-			s += "(s32)"
+			ss += "(s32)"
 		}
-		s += instr.Args[2].Str(arg2_is_dec)
+		ss += instr.Args[2].Str(arg2_is_dec)
 	}
 
-	return "\t; " + s
+	return ss, 0
 }
 
-func PseudoLoadUpper(instr *SoraInstruction, doc *SoraDocument) string {
+func PseudoLoadUpper(instr *SoraInstruction, doc *SoraDocument) (string, int) {
 	ss := instr.Args[0].Str(false) + " = " + instr.Args[1].Str(false)
 
 	//if instr.Args[1].IsZero() {
@@ -142,10 +150,10 @@ func PseudoLoadUpper(instr *SoraInstruction, doc *SoraDocument) string {
 		ss += " << 16"
 	}
 
-	return "\t; " + ss
+	return ss, 0
 }
 
-func PseudoLoad(instr *SoraInstruction, doc *SoraDocument) string {
+func PseudoLoad(instr *SoraInstruction, doc *SoraDocument) (string, int) {
 	suffix := instr.Mnemonic[1:]
 	sz := ""
 	mask := ""
@@ -164,10 +172,10 @@ func PseudoLoad(instr *SoraInstruction, doc *SoraDocument) string {
 		ss += mask
 	}
 
-	return "\t; " + ss
+	return ss, 0
 }
 
-func PseudoStore(instr *SoraInstruction, doc *SoraDocument) string {
+func PseudoStore(instr *SoraInstruction, doc *SoraDocument) (string, int) {
 	sz := ""
 	suffix := instr.Mnemonic[1:]
 	if suffix == "b" {
@@ -179,22 +187,22 @@ func PseudoStore(instr *SoraInstruction, doc *SoraDocument) string {
 	}
 
 	ss := "(" + sz + ")" + instr.Args[1].Str(false) + " = " + instr.Args[0].Str(false)
-	return "\t; " + ss
+	return ss, 0
 }
 
 var maskToType map[byte]string = map[byte]string{
 	'v': "void",
 	'x': "u32",
-	'i': "int",
+	'i': "s32",
 	'f': "float",
 	'X': "u64",
-	'I': "int64",
+	'I': "s64",
 	'F': "double",
 	's': "const char*",
 	'p': "(u32*)",
 }
 
-func PseudoSyscall(instr *SoraInstruction, doc *SoraDocument) string {
+func PseudoSyscall(instr *SoraInstruction, doc *SoraDocument) (string, int) {
 	moduleIndex, funcIndex := instr.GetSyscallNumber()
 
 	ss := ""
@@ -226,15 +234,128 @@ func PseudoSyscall(instr *SoraInstruction, doc *SoraDocument) string {
 		}
 
 		ss += ")"
-		// 0
-	} else {
-		ss = fmt.Sprintf("m0x%02x::f0x%03x()", moduleIndex, funcIndex)
-		// -1
+		return ss, 0
 	}
 
-	return "\t; " + ss
+	ss = fmt.Sprintf("m0x%02x::f0x%03x()", moduleIndex, funcIndex)
+	return ss, -1
+
 }
 
-func PseudoJump(instr *SoraInstruction, doc *SoraDocument) string {
-	return "\t; TODO"
+func PseudoJump(instr *SoraInstruction, doc *SoraDocument) (string, int) {
+	jal_ra := instr.Address + 4
+	if instr.Info.HasDelaySlot {
+		jal_ra += 4
+	}
+
+	arg0 := instr.Args[0]
+
+	var next_instr *SoraInstruction = nil
+	jmp := false
+	op := ""
+	op_z := ""
+	op_l := ""
+	ss := ""
+
+	if instr.Info.HasDelaySlot {
+		next_instr = doc.InstrManager.Get(instr.Address + 4)
+		if next_instr == nil {
+			fmt.Printf("WARNING:\tPseudoJump delay shot instruction out of range\n")
+			return "", -1
+		}
+	}
+
+	switch instr.Mnemonic {
+	case "jal":
+		if next_instr != nil {
+			_ss, _ := Code(next_instr, doc)
+			ss += _ss + ";\n"
+		}
+
+		if arg0.IsZero() {
+			return "", -1
+		}
+
+		ss += "v0 = " + arg0.Str(false) + "(...)"
+		ss += fmt.Sprintf("\t/* { ra = 0x%08x; ", jal_ra)
+		ss += fmt.Sprintf("goto %s; } */", arg0.CodeLabel(doc))
+
+		jmp = true
+	case "j":
+		if next_instr != nil {
+			_ss, _ := Code(next_instr, doc)
+			ss += _ss + ";\n"
+		}
+
+		ss += fmt.Sprintf("goto %s;", arg0.CodeLabel(doc))
+
+		jmp = true
+	case "jr":
+		if next_instr != nil {
+			_ss, _ := Code(next_instr, doc)
+			ss += _ss + ";\n"
+		}
+
+		if arg0.Type == ArgReg && arg0.Reg == "ra" {
+			ss += "return v0"
+			ss += "\t/* { goto -> ra; } */"
+		} else {
+			ss += fmt.Sprintf("goto %s;", arg0.Str(false))
+		}
+
+		jmp = true
+	case "beq":
+		op = "=="
+	case "bne":
+		op = "!="
+	case "blez":
+		op = "<= 0"
+	case "bgtz":
+		op_z = "> 0"
+	case "bltz":
+		op_z = "< 0"
+	case "bgez":
+		op_z = ">= 0"
+	case "bnel":
+		op_l = "!="
+	case "beql":
+		op_l = "=="
+	}
+
+	if !jmp {
+		if op != "" {
+			if next_instr != nil {
+				_ss, _ := Code(next_instr, doc)
+				ss += _ss + ";\n"
+			}
+
+			ss += "\tif (" + instr.Args[0].Str(false) + " " + op + " " + instr.Args[1].Str(false) + ") "
+			ss += "goto " + instr.Args[2].CodeLabel(doc)
+		} else if op_z != "" {
+			if next_instr != nil {
+				_ss, _ := Code(next_instr, doc)
+				ss += _ss + ";\n"
+			}
+
+			ss += "\tif ((s32)" + instr.Args[0].Str(false) + " " + op_z + ") "
+			ss += "goto " + instr.Args[1].CodeLabel(doc)
+
+		} else if op_l != "" {
+			ss += "\tif (" + instr.Args[0].Str(false) + " " + op_l + " " + instr.Args[1].Str(false) + ") {\n"
+			if next_instr != nil {
+				_ss, _ := Code(next_instr, doc)
+				ss += "\t" + _ss + ";\n"
+			}
+			ss += "\t\tgoto " + instr.Args[2].Str(false) + "\n"
+			ss += "\t}"
+
+		} else {
+			return "", -1
+		}
+	}
+
+	if instr.Info.HasDelaySlot {
+		return ss, 1
+	}
+	return ss, 0
 }

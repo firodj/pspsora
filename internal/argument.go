@@ -116,6 +116,24 @@ func (arg *SoraArgument) Str(isDec bool) string {
 	return ss
 }
 
+func (arg *SoraArgument) CodeLabel(doc *SoraDocument) string {
+	if arg.IsCodeLocation {
+		if funTarget := doc.SymMap.GetFunctionStart(uint32(arg.ValOfs)); funTarget != 0 {
+			label := doc.SymMap.GetLabelName(funTarget)
+			if label != nil {
+				ss := *label
+				disp := uint32(arg.ValOfs) - funTarget
+				if disp != 0 {
+					ss += fmt.Sprintf("+0x%x", disp)
+				}
+
+				return ss
+			}
+		}
+	}
+	return arg.Str(false)
+}
+
 func (arg *SoraArgument) IsNegative() bool {
 	return arg.Type == ArgImm && arg.ValOfs < 0
 }

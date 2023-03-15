@@ -346,6 +346,8 @@ func (doc *SoraDocument) GetPrintLines(state BBAnalState) {
 		fmt.Println()
 	}
 
+	skip_delayslot := uint32(0)
+
 	for _, line := range state.Lines {
 		if line.Address == state.BranchAddr {
 			fmt.Print("*")
@@ -360,18 +362,17 @@ func (doc *SoraDocument) GetPrintLines(state BBAnalState) {
 
 		fmt.Printf("0x%08x\t%s", line.Address, line.Info.Dizz)
 
-		for _, arg := range line.Args {
-			if arg.IsCodeLocation {
-				if funTarget := doc.SymMap.GetFunctionStart(uint32(arg.ValOfs)); funTarget != 0 {
-					label = doc.SymMap.GetLabelName(funTarget)
-					if label != nil {
-						fmt.Printf("\t; %s+0x%x", *label, uint32(arg.ValOfs)-funTarget)
-					}
-				}
+		if skip_delayslot == line.Address {
+			skip_delayslot = 0
+		} else {
+			ss, ok := Code(line, doc)
+			if ok == 1 {
+				skip_delayslot = line.Address + 4
+			}
+			if ss != "" {
+				fmt.Println("\t; " + ss)
 			}
 		}
-
-		fmt.Print(Code(line, doc))
 
 		fmt.Println()
 	}
