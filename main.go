@@ -82,12 +82,13 @@ func testBBTrace(doc *internal.SoraDocument) *ffcli.Command {
 			fmt.Printf("func name=%s addr=0x%x size=%d last=0x%x\n", funStart.Name, funStart.Address, funStart.Size, funStart.LastAddress())
 			anal := internal.NewFunctionAnalyzer(doc, funStart)
 			anal.Process()
-			anal.Debug(doc.GetPrintLines)
+			anal.Debug(doc.GetPrintCodes)
 
+			fmt.Println()
 			funImport := doc.FunManager.Get(0x08a38a70)
 			anal2 := internal.NewFunctionAnalyzer(doc, funImport)
 			anal2.Process()
-			anal2.Debug(doc.GetPrintLines)
+			anal2.Debug(doc.GetPrintCodes)
 
 			return nil
 		},

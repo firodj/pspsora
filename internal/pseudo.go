@@ -329,7 +329,7 @@ func PseudoJump(instr *SoraInstruction, doc *SoraDocument) (string, int) {
 				ss += _ss + ";\n"
 			}
 
-			ss += "\tif (" + instr.Args[0].Str(false) + " " + op + " " + instr.Args[1].Str(false) + ") "
+			ss += "if (" + instr.Args[0].Str(false) + " " + op + " " + instr.Args[1].Str(false) + ") "
 			ss += "goto " + instr.Args[2].CodeLabel(doc)
 		} else if op_z != "" {
 			if next_instr != nil {
@@ -337,17 +337,17 @@ func PseudoJump(instr *SoraInstruction, doc *SoraDocument) (string, int) {
 				ss += _ss + ";\n"
 			}
 
-			ss += "\tif ((s32)" + instr.Args[0].Str(false) + " " + op_z + ") "
+			ss += "if ((s32)" + instr.Args[0].Str(false) + " " + op_z + ") "
 			ss += "goto " + instr.Args[1].CodeLabel(doc)
 
 		} else if op_l != "" {
-			ss += "\tif (" + instr.Args[0].Str(false) + " " + op_l + " " + instr.Args[1].Str(false) + ") {\n"
+			ss += "if (" + instr.Args[0].Str(false) + " " + op_l + " " + instr.Args[1].Str(false) + ") {\n"
 			if next_instr != nil {
 				_ss, _ := Code(next_instr, doc)
 				ss += "\t" + _ss + ";\n"
 			}
-			ss += "\t\tgoto " + instr.Args[2].Str(false) + "\n"
-			ss += "\t}"
+			ss += "\tgoto " + instr.Args[2].Str(false) + "\n"
+			ss += "}"
 
 		} else {
 			return "", -1

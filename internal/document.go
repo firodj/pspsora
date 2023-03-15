@@ -328,20 +328,29 @@ func (doc *SoraDocument) GetRegName(cat int, index int) string {
 	return ""
 }
 
-func (doc *SoraDocument) GetPrintLines(state BBAnalState) {
-	funStart := doc.SymMap.GetFunctionStart(state.BBAddr)
-	var label *string
-	if funStart != 0 {
-		label = doc.SymMap.GetLabelName(funStart)
+func (doc *SoraDocument) GetLabelName(addr uint32) string {
+	if funTarget := doc.SymMap.GetFunctionStart(uint32(addr)); funTarget != 0 {
+		label := doc.SymMap.GetLabelName(funTarget)
 		if label != nil {
-			fmt.Printf("%s+0x%x:", *label, state.BBAddr-funStart)
-		} else {
-			fmt.Print("<nil>:")
+			ss := *label
+			disp := addr - funTarget
+			if disp != 0 {
+				ss += fmt.Sprintf("__0x%x", disp)
+			}
+
+			return ss
 		}
 	}
+	return fmt.Sprintf("loc_0x%08x", addr)
+}
+
+func (doc *SoraDocument) GetPrintLines(state BBAnalState) {
+	label := doc.GetLabelName(state.BBAddr)
+
+	fmt.Printf("%s:\t// 0x%08x", label, state.BBAddr)
 
 	if state.Visited {
-		fmt.Println("\tv")
+		fmt.Println("\t(v)")
 	} else {
 		fmt.Println()
 	}
@@ -378,4 +387,40 @@ func (doc *SoraDocument) GetPrintLines(state BBAnalState) {
 	}
 	//fmt.Printf("last 0x%08x, branch 0x%08x\n", state.LastAddr, state.BranchAddr)
 	//fmt.Printf("---\n")
+}
+
+func (doc *SoraDocument) GetPrintCodes(state BBAnalState) {
+	label := doc.GetLabelName(state.BBAddr)
+
+	fmt.Printf("%s:\t// 0x%08x", label, state.BBAddr)
+
+	if state.Visited {
+		fmt.Println("\t// visited")
+	} else {
+		fmt.Println()
+	}
+
+	skip_delayslot := uint32(0)
+
+	for _, line := range state.Lines {
+		//fmt.Printf("0x%08x\t%s", line.Address, line.Info.Dizz)
+
+		if skip_delayslot != 0 {
+			if line.Address != skip_delayslot {
+				panic("unsync skip_delayslot")
+			}
+			skip_delayslot = 0
+		} else {
+			ss, ok := Code(line, doc)
+			if ok == 1 {
+				skip_delayslot = line.Address + 4
+			}
+			if ss != "" {
+				fmt.Printf("%s", ss)
+			}
+		}
+
+		fmt.Printf("\t// %s", line.Info.Dizz)
+		fmt.Println()
+	}
 }

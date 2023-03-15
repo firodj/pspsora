@@ -2,6 +2,7 @@ package internal
 
 import (
 	"fmt"
+	"sort"
 )
 
 type FunctionAnalyzer struct {
@@ -23,13 +24,24 @@ type BBVisit struct {
 }
 
 func (anal *FunctionAnalyzer) Debug(cb BBYieldFunc) {
-	for _, bb_addr := range anal.fun.BBAddresses {
+	addresses := anal.fun.BBAddresses
+	sort.SliceStable(addresses, func(i, j int) bool {
+		return i < j
+	})
+
+	bb_adj := uint32(0)
+
+	for bb_i := range addresses {
+		bb_addr := addresses[bb_i]
 		anal.doc.BBManager.Get(bb_addr)
 
-		fmt.Printf("----\n  xrefs from:\n")
-		xref_froms, xref_tos := anal.doc.BBManager.GetRefs(bb_addr)
-		for _, xref_from := range xref_froms {
-			fmt.Printf("  - %s\n", xref_from)
+		_, xref_tos := anal.doc.BBManager.GetRefs(bb_addr)
+
+		if bb_adj != 0 {
+			if bb_adj != bb_addr {
+				fmt.Printf("goto %s\t", anal.doc.GetLabelName(bb_adj))
+			}
+			bb_adj = 0
 		}
 
 		anal.doc.ProcessBB(bb_addr, 0, func(bbas BBAnalState) {
@@ -39,9 +51,11 @@ func (anal *FunctionAnalyzer) Debug(cb BBYieldFunc) {
 			cb(bbas)
 		})
 
-		fmt.Printf("  xrefs to:\n")
 		for _, xref_to := range xref_tos {
-			fmt.Printf("  - %s\n", xref_to)
+			if xref_to.IsAdjacent {
+				bb_adj = xref_to.To
+			}
+			//fmt.Printf("  - %s\n", xref_to)
 		}
 	}
 }
@@ -67,11 +81,7 @@ func (anal *FunctionAnalyzer) Process() {
 		cur_addr := bb_queues.Pop()
 
 		if _, ok := anal.bb_visits[cur_addr]; !ok {
-			if bbfun := anal.doc.FunManager.Get(cur_addr); bbfun == nil {
-				fmt.Printf("WARNING:\tunknown bb (and not a func): 0x08%x\n", cur_addr)
-			} else {
-				fmt.Printf("WARNING:\tbb outisde: 0x08%x\n", cur_addr)
-			}
+			fmt.Printf("DEBUG:\tfun %s/0x%08x doesnt have bb 0x08%x\n", anal.fun.Name, anal.fun.Address, cur_addr)
 			continue
 		}
 
