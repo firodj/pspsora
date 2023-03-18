@@ -253,9 +253,12 @@ func PseudoJump(instr *SoraInstruction, doc *SoraDocument) (string, int) {
 	var next_instr *SoraInstruction = nil
 	jmp := false
 	op := ""
-	op_z := ""
 	op_l := ""
 	ss := ""
+	var arg1 *SoraArgument = nil
+	if len(instr.Args) >= 2 {
+		arg1 = instr.Args[1]
+	}
 
 	if instr.Info.HasDelaySlot {
 		next_instr = doc.InstrManager.Get(instr.Address + 4)
@@ -309,13 +312,17 @@ func PseudoJump(instr *SoraInstruction, doc *SoraDocument) (string, int) {
 	case "bne":
 		op = "!="
 	case "blez":
-		op = "<= 0"
+		arg1 = NewSoraArgument("0", nil)
+		op = "<="
 	case "bgtz":
-		op_z = "> 0"
+		arg1 = NewSoraArgument("0", nil)
+		op = ">"
 	case "bltz":
-		op_z = "< 0"
+		arg1 = NewSoraArgument("0", nil)
+		op = "<"
 	case "bgez":
-		op_z = ">= 0"
+		arg1 = NewSoraArgument("0", nil)
+		op = ">="
 	case "bnel":
 		op_l = "!="
 	case "beql":
@@ -323,32 +330,27 @@ func PseudoJump(instr *SoraInstruction, doc *SoraDocument) (string, int) {
 	}
 
 	if !jmp {
+		ss_next := ""
+		if next_instr != nil {
+			ss_next, _ = Code(next_instr, doc)
+		}
+
 		if op != "" {
-			if next_instr != nil {
-				_ss, _ := Code(next_instr, doc)
-				ss += _ss + ";\n"
+			ss += "if (" + arg0.Str(false) + " " + op + " " + arg1.Str(false) + ") {\n"
+			if ss_next != "" {
+				ss += "\t" + ss_next + ";\n"
 			}
+			ss += "\tgoto " + instr.Args[2].CodeLabel(doc) + ";\n}"
 
-			ss += "if (" + instr.Args[0].Str(false) + " " + op + " " + instr.Args[1].Str(false) + ") "
-			ss += "goto " + instr.Args[2].CodeLabel(doc)
-		} else if op_z != "" {
-			if next_instr != nil {
-				_ss, _ := Code(next_instr, doc)
-				ss += _ss + ";\n"
+			if ss_next != "" {
+				ss += " else {\n\t" + ss_next + ";\n}"
 			}
-
-			ss += "if ((s32)" + instr.Args[0].Str(false) + " " + op_z + ") "
-			ss += "goto " + instr.Args[1].CodeLabel(doc)
-
 		} else if op_l != "" {
-			ss += "if (" + instr.Args[0].Str(false) + " " + op_l + " " + instr.Args[1].Str(false) + ") {\n"
-			if next_instr != nil {
-				_ss, _ := Code(next_instr, doc)
-				ss += "\t" + _ss + ";\n"
+			ss += "if (" + arg0.Str(false) + " " + op_l + " " + arg1.Str(false) + ") {\n"
+			if ss_next != "" {
+				ss += "\t" + ss_next + ";\n"
 			}
-			ss += "\tgoto " + instr.Args[2].Str(false) + "\n"
-			ss += "}"
-
+			ss += "\tgoto " + instr.Args[2].Str(false) + ";\n}"
 		} else {
 			return "", -1
 		}
