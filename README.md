@@ -14,6 +14,7 @@ $ go run main.go -- testDisasm
    but need learnig curve.
 2. [ ] Check PPSSPP IR
 3. [ ] After BB trace, check function that have visited one of its return.
+4. [ ] we may jump to AST (smartdec called it IR).
 
 Decompile in General:
 1. binary -> disasm

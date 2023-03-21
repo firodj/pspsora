@@ -9,7 +9,6 @@ import (
 
 	"gopkg.in/yaml.v3"
 
-	"github.com/davecgh/go-spew/spew"
 	"github.com/firodj/pspsora/bridge"
 )
 
@@ -393,10 +392,12 @@ func (doc *SoraDocument) GetPrintLines(state BBAnalState) {
 func (doc *SoraDocument) GetPrintCodes(state BBAnalState) {
 	label := doc.GetLabelName(state.BBAddr)
 
+	/**
 	xref_froms := doc.BBManager.GetEnterRefs(state.BBAddr)
 	for _, xref := range xref_froms {
 		spew.Dump(xref)
 	}
+	*/
 
 	fmt.Printf("%s:\t// 0x%08x", label, state.BBAddr)
 
@@ -409,13 +410,12 @@ func (doc *SoraDocument) GetPrintCodes(state BBAnalState) {
 	skip_delayslot := uint32(0)
 
 	for _, line := range state.Lines {
-		//fmt.Printf("0x%08x\t%s", line.Address, line.Info.Dizz)
-
 		if skip_delayslot != 0 {
 			if line.Address != skip_delayslot {
 				panic("unsync skip_delayslot")
 			}
 			skip_delayslot = 0
+			fmt.Printf("\t\t\t\t// 0x%08x: %s", line.Address, line.Info.Dizz)
 		} else {
 			ss, ok := Code(line, doc)
 			if ok == 1 {
@@ -423,9 +423,10 @@ func (doc *SoraDocument) GetPrintCodes(state BBAnalState) {
 			}
 			if ss != "" {
 				fmt.Printf("%s", ss)
+				fmt.Printf("\t\t\t// 0x%08x: %s", line.Address, line.Info.Dizz)
 			}
 			if ok == -1 {
-				fmt.Printf("\t0x%08x\t%s", line.Address, line.Info.Dizz)
+				fmt.Printf("\t\t0x%08x\t%s", line.Address, line.Info.Dizz)
 				panic("error")
 			}
 		}

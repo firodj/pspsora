@@ -116,11 +116,11 @@ func (mgr *FunctionManager) SplitAt(split_addr uint32) (prev_func, split_func *S
 
 	mgr.doc.SymMap.SetFunctionSize(prev_func.Address, prev_func.Size)
 
-	mgr.reassingBBAddresses(prev_func, split_func)
+	mgr.reBBAddresses(prev_func, split_func)
 	return
 }
 
-func (mgr *FunctionManager) reassingBBAddresses(funs ...*SoraFunction) {
+func (mgr *FunctionManager) reBBAddresses(funs ...*SoraFunction) {
 	removeds := make([]uint32, 0)
 	for _, fun := range funs {
 		owneds := make([]uint32, 0)

@@ -368,6 +368,8 @@ func PseudoCondJump(instr *SoraInstruction, doc *SoraDocument) (string, int) {
 		panic("unknown conditional jump")
 	}
 
+	argElse := NewSoraArgument(fmt.Sprintf("->$%08x", j_else), doc.SymMap.GetLabelName)
+
 	if op != "" {
 		ss += "zf = " + arg0.Str(false) + " " + op + " " + arg1.Str(false) + ";\n"
 		ss += ss_next + ";\n"
@@ -377,11 +379,9 @@ func PseudoCondJump(instr *SoraInstruction, doc *SoraDocument) (string, int) {
 		} else if then_taken {
 			ss += "assert(zf); goto " + instr.Args[2].CodeLabel(doc) + ";"
 		} else {
-			ss += "assert(!zf);"
+			ss += "assert(!zf); // goto " + argElse.CodeLabel(doc) + ";"
 		}
 	} else if op_l != "" {
-		argElse := NewSoraArgument(fmt.Sprintf("->$%08x", j_else), doc.SymMap.GetLabelName)
-
 		ss += "zf = " + arg0.Str(false) + " " + op_l + " " + arg1.Str(false) + ";\n"
 
 		if then_taken && else_taken {

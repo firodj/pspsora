@@ -9,6 +9,7 @@ type FunctionAnalyzer struct {
 	doc       *SoraDocument
 	fun       *SoraFunction
 	bb_visits map[uint32]*BBVisit
+	bb_rets   []uint32
 }
 
 func NewFunctionAnalyzer(doc *SoraDocument, fun *SoraFunction) *FunctionAnalyzer {
@@ -24,9 +25,12 @@ type BBVisit struct {
 }
 
 func (anal *FunctionAnalyzer) Debug(cb BBYieldFunc) {
-	addresses := anal.fun.BBAddresses
+	var addresses []uint32
+	for addr := range anal.bb_visits {
+		addresses = append(addresses, addr)
+	}
 	sort.SliceStable(addresses, func(i, j int) bool {
-		return i < j
+		return addresses[i] < addresses[j]
 	})
 
 	bb_adj := uint32(0)
@@ -39,7 +43,7 @@ func (anal *FunctionAnalyzer) Debug(cb BBYieldFunc) {
 
 		if bb_adj != 0 {
 			if bb_adj != bb_addr {
-				fmt.Printf("goto %s\t", anal.doc.GetLabelName(bb_adj))
+				fmt.Printf("(auto) goto %s\t", anal.doc.GetLabelName(bb_adj))
 			}
 			bb_adj = 0
 		}
@@ -55,8 +59,17 @@ func (anal *FunctionAnalyzer) Debug(cb BBYieldFunc) {
 			if xref_to.IsAdjacent {
 				bb_adj = xref_to.To
 			}
-			//fmt.Printf("  - %s\n", xref_to)
 		}
+	}
+
+	if len(anal.bb_rets) == 0 {
+		fmt.Println("WARNING\tfunction doesnt visit return")
+	} else {
+		fmt.Print("INFO\tfunction has retruns: ")
+		for _, bb_ret := range anal.bb_rets {
+			fmt.Printf("0x%08x ", bb_ret)
+		}
+		fmt.Println()
 	}
 }
 
@@ -75,25 +88,66 @@ func (anal *FunctionAnalyzer) Process() {
 	}
 
 	var bb_queues Queue[uint32]
-	bb_queues.Push(anal.fun.Address)
+	bb_queues.PushUnique(anal.fun.Address)
+
+	anal.bb_rets = make([]uint32, 0)
 
 	for bb_queues.Len() > 0 {
 		cur_addr := bb_queues.Pop()
 
 		if _, ok := anal.bb_visits[cur_addr]; !ok {
-			fmt.Printf("DEBUG:\tfun %s/0x%08x doesnt have bb 0x08%x\n", anal.fun.Name, anal.fun.Address, cur_addr)
+			/**
+			if cur_addr >= anal.fun.Address && cur_addr <= anal.fun.LastAddress() {
+				if bb_notvisit := anal.doc.BBManager.Get(cur_addr); bb_notvisit != nil {
+					if bb_notvisit.Address == cur_addr {
+						anal.bb_visits[cur_addr] = &BBVisit{
+							BB:      bb_notvisit,
+							Visited: false,
+						}
+					} else {
+						fmt.Printf("DEBUG:\tunexpected bb 0x%08x for %08x\n", bb_notvisit.Address, cur_addr)
+						continue
+					}
+				}
+			} else {
+			*/
+			fmt.Printf("DEBUG:\tfun %s/0x%08x doesnt include bb 0x08%x\n", anal.fun.Name, anal.fun.Address, cur_addr)
 			continue
 		}
 
 		cur_visit := anal.bb_visits[cur_addr]
-		if cur_visit.Visited {
-			continue
-		}
 		cur_visit.Visited = true
+
+		brInstr := anal.doc.InstrManager.Get(cur_visit.BB.BranchAddress)
+		if brInstr != nil {
+			if brInstr.Mnemonic == "jr" && brInstr.Args[0].Reg == "ra" {
+				anal.bb_rets = append(anal.bb_rets, cur_addr)
+			}
+		}
+
+		//is_then, is_else := false, false
 
 		outfrom_bb := anal.doc.BBManager.GetExitRefs(cur_addr)
 		for _, xref_to_bb := range outfrom_bb {
-			bb_queues.Push(xref_to_bb.To)
+			bb_queues.PushUnique(xref_to_bb.To)
+			/**
+			if xref_to_bb.IsThen {
+				is_then = true
+			}
+			if xref_to_bb.IsElse {
+				is_else = true
+			}
+			*/
 		}
+
+		/**
+		if is_then && !is_else {
+			bb_queues.PushUnique(cur_visit.BB.LastAddress + 4)
+		} else if is_else && !is_then {
+			if brInstr != nil && brInstr.Info.BranchTarget != 0 {
+				bb_queues.PushUnique(brInstr.Info.BranchTarget)
+			}
+		}
+		*/
 	}
 }

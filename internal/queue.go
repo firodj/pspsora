@@ -1,12 +1,22 @@
 package internal
 
 // generics Queue
-type Queue[T any] struct {
+type Queue[T comparable] struct {
 	elements []T
+	unique   map[T]bool
 }
 
 func (q *Queue[T]) Push(element T) {
 	q.elements = append(q.elements, element)
+}
+func (q *Queue[T]) PushUnique(element T) {
+	if q.unique == nil {
+		q.unique = make(map[T]bool)
+	}
+	if _, ok := q.unique[element]; !ok {
+		q.elements = append(q.elements, element)
+		q.unique[element] = true
+	}
 }
 
 func (q *Queue[T]) Len() int {
