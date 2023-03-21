@@ -32,20 +32,20 @@ func init() {
 		"li":  PseudoAssign,
 		"lui": PseudoLoadUpper,
 		"lw":  PseudoLoad,
-		"bu":  PseudoLoad,
+		"lbu": PseudoLoad,
 
 		"sw": PseudoStore,
 		"sb": PseudoStore,
 		"sh": PseudoStore,
 
-		"beq":  PseudoJump,
-		"beql": PseudoJump,
-		"bne":  PseudoJump,
-		"bnel": PseudoJump,
-		"blez": PseudoJump,
-		"bgtz": PseudoJump,
-		"bltz": PseudoJump,
-		"bgez": PseudoJump,
+		"beq":  PseudoCondJump,
+		"beql": PseudoCondJump,
+		"bne":  PseudoCondJump,
+		"bnel": PseudoCondJump,
+		"blez": PseudoCondJump,
+		"bgtz": PseudoCondJump,
+		"bltz": PseudoCondJump,
+		"bgez": PseudoCondJump,
 
 		"jr":  PseudoJump,
 		"j":   PseudoJump,
@@ -249,64 +249,101 @@ func PseudoJump(instr *SoraInstruction, doc *SoraDocument) (string, int) {
 	}
 
 	arg0 := instr.Args[0]
-
-	var next_instr *SoraInstruction = nil
-	jmp := false
-	op := ""
-	op_l := ""
 	ss := ""
-	var arg1 *SoraArgument = nil
-	if len(instr.Args) >= 2 {
-		arg1 = instr.Args[1]
-	}
+	ss_next := ""
 
 	if instr.Info.HasDelaySlot {
-		next_instr = doc.InstrManager.Get(instr.Address + 4)
+		next_instr := doc.InstrManager.Get(instr.Address + 4)
 		if next_instr == nil {
 			fmt.Printf("WARNING:\tPseudoJump delay shot instruction out of range\n")
 			return "", -1
 		}
+		ss_next, _ = Code(next_instr, doc)
 	}
 
 	switch instr.Mnemonic {
 	case "jal":
-		if next_instr != nil {
-			_ss, _ := Code(next_instr, doc)
-			ss += _ss + ";\n"
+		if ss_next != "" {
+			ss += ss_next + "\n"
 		}
 
 		if arg0.IsZero() {
 			return "", -1
 		}
 
-		ss += "v0 = " + arg0.Str(false) + "(...)"
+		ss += "v0 = " + arg0.Str(false) + "(...);"
 		ss += fmt.Sprintf("\t/* { ra = 0x%08x; ", jal_ra)
 		ss += fmt.Sprintf("goto %s; } */", arg0.CodeLabel(doc))
 
-		jmp = true
 	case "j":
-		if next_instr != nil {
-			_ss, _ := Code(next_instr, doc)
-			ss += _ss + ";\n"
+		if ss_next != "" {
+			ss += ss_next + "\n"
 		}
-
 		ss += fmt.Sprintf("goto %s;", arg0.CodeLabel(doc))
-
-		jmp = true
 	case "jr":
-		if next_instr != nil {
-			_ss, _ := Code(next_instr, doc)
-			ss += _ss + ";\n"
+		if ss_next != "" {
+			ss += ss_next + "\n"
 		}
-
 		if arg0.Type == ArgReg && arg0.Reg == "ra" {
-			ss += "return v0"
+			ss += "return v0;"
 			ss += "\t/* { goto -> ra; } */"
 		} else {
 			ss += fmt.Sprintf("goto %s;", arg0.Str(false))
 		}
+	default:
+		panic("unknown jump")
+	}
 
-		jmp = true
+	if instr.Info.HasDelaySlot {
+		return ss, 1
+	}
+	return ss, 0
+}
+
+func PseudoCondJump(instr *SoraInstruction, doc *SoraDocument) (string, int) {
+	j_else := instr.Address + 4
+	then_taken := false
+	else_taken := false
+
+	arg0 := instr.Args[0]
+
+	op := ""
+	op_l := ""
+	ss := ""
+	ss_next := ""
+
+	var arg1 *SoraArgument = nil
+	if len(instr.Args) >= 2 {
+		arg1 = instr.Args[1]
+	}
+
+	if instr.Info.HasDelaySlot {
+		next_instr := doc.InstrManager.Get(instr.Address + 4)
+		if next_instr == nil {
+			fmt.Printf("WARNING:\tPseudoCondJump delay shot instruction out of range\n")
+			return "", -1
+		}
+		j_else += 4
+		ss_next, _ = Code(next_instr, doc)
+	} else {
+		panic("unimplmented without delayslot")
+	}
+
+	theBB := doc.BBManager.Get(instr.Address)
+	if theBB == nil {
+		fmt.Printf("ERROR:\tunable to get BB for: 0x%08x", instr.Address)
+		return "", -1
+	}
+	xref_tos := doc.BBManager.GetExitRefs(theBB.Address)
+	for _, xref := range xref_tos {
+		if xref.To == j_else {
+			else_taken = true
+		} else if !xref.IsAdjacent {
+			then_taken = true
+		}
+	}
+
+	switch instr.Mnemonic {
 	case "beq":
 		op = "=="
 	case "bne":
@@ -327,37 +364,44 @@ func PseudoJump(instr *SoraInstruction, doc *SoraDocument) (string, int) {
 		op_l = "!="
 	case "beql":
 		op_l = "=="
+	default:
+		panic("unknown conditional jump")
 	}
 
-	if !jmp {
-		ss_next := ""
-		if next_instr != nil {
-			ss_next, _ = Code(next_instr, doc)
-		}
+	if op != "" {
+		ss += "zf = " + arg0.Str(false) + " " + op + " " + arg1.Str(false) + ";\n"
+		ss += ss_next + ";\n"
 
-		if op != "" {
-			ss += "if (" + arg0.Str(false) + " " + op + " " + arg1.Str(false) + ") {\n"
-			if ss_next != "" {
-				ss += "\t" + ss_next + ";\n"
-			}
-			ss += "\tgoto " + instr.Args[2].CodeLabel(doc) + ";\n}"
-
-			if ss_next != "" {
-				ss += " else {\n\t" + ss_next + ";\n}"
-			}
-		} else if op_l != "" {
-			ss += "if (" + arg0.Str(false) + " " + op_l + " " + arg1.Str(false) + ") {\n"
-			if ss_next != "" {
-				ss += "\t" + ss_next + ";\n"
-			}
-			ss += "\tgoto " + instr.Args[2].Str(false) + ";\n}"
+		if then_taken && else_taken {
+			ss += "if (zf) { goto " + instr.Args[2].CodeLabel(doc) + "; }"
+		} else if then_taken {
+			ss += "assert(zf); goto " + instr.Args[2].CodeLabel(doc) + ";"
 		} else {
-			return "", -1
+			ss += "assert(!zf);"
 		}
+	} else if op_l != "" {
+		argElse := NewSoraArgument(fmt.Sprintf("->$%08x", j_else), doc.SymMap.GetLabelName)
+
+		ss += "zf = " + arg0.Str(false) + " " + op_l + " " + arg1.Str(false) + ";\n"
+
+		if then_taken && else_taken {
+			ss += "if (!zf) { goto " + argElse.CodeLabel(doc) + "; }\n"
+			ss += ss_next + "\n"
+			ss += "goto " + instr.Args[2].CodeLabel(doc) + ";"
+		} else if then_taken {
+			ss += "assert(zf);\n"
+			ss += ss_next + "\n"
+			ss += "goto " + instr.Args[2].CodeLabel(doc) + ";"
+		} else {
+			ss += "assert(!zf); // goto " + argElse.CodeLabel(doc) + ";"
+		}
+	} else {
+		return "", -1
 	}
 
 	if instr.Info.HasDelaySlot {
 		return ss, 1
 	}
+
 	return ss, 0
 }

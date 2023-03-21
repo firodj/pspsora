@@ -90,31 +90,69 @@ func (funmgr *FunctionManager) Get(addr uint32) *SoraFunction {
 
 func (mgr *FunctionManager) SplitAt(split_addr uint32) (prev_func, split_func *SoraFunction) {
 	fn_start := mgr.doc.SymMap.GetFunctionStart(split_addr)
-	funcStart := mgr.Get(split_addr)
 
 	if fn_start == 0 {
+		funcStart := mgr.Get(split_addr)
 		if funcStart == nil {
 			fmt.Printf("TODO:\tunimplemented create func when split at 0x%08x\n", split_addr)
 		}
 		return
 	}
-	funcStart = mgr.Get(fn_start)
-	prev_func = funcStart
+	prev_func = mgr.Get(fn_start)
 
-	last_addr := funcStart.LastAddress()
-	if funcStart.LastAddress() >= split_addr {
-		funcStart.SetLastAddress(split_addr - 4)
+	last_addr := prev_func.LastAddress()
+	if prev_func.LastAddress() >= split_addr {
+		prev_func.SetLastAddress(split_addr - 4)
 	}
 
 	split_size := last_addr - split_addr + 4
 	split_func = mgr.CreateNewFunction(split_addr, split_size)
 
 	if split_func == nil {
-		funcStart.SetLastAddress(last_addr)
+		prev_func.SetLastAddress(last_addr)
 		fmt.Printf("ERROR:\tunable to create splitted func at 0x%08x\n", split_addr)
 		return
 	}
 
-	mgr.doc.SymMap.SetFunctionSize(funcStart.Address, funcStart.Size)
+	mgr.doc.SymMap.SetFunctionSize(prev_func.Address, prev_func.Size)
+
+	mgr.reassingBBAddresses(prev_func, split_func)
 	return
+}
+
+func (mgr *FunctionManager) reassingBBAddresses(funs ...*SoraFunction) {
+	removeds := make([]uint32, 0)
+	for _, fun := range funs {
+		owneds := make([]uint32, 0)
+		for _, addr := range fun.BBAddresses {
+			if addr >= fun.Address && addr <= fun.LastAddress() {
+				fmt.Printf("debug\tfunc 0x%08x owning bb 0x%08x\n", fun.Address, addr)
+				owneds = append(owneds, addr)
+			} else {
+				fmt.Printf("debug\tfunc 0x%08x reject bb 0x%08x\n", fun.Address, addr)
+				removeds = append(removeds, addr)
+			}
+		}
+		fun.BBAddresses = owneds
+	}
+
+	orphans := make([]uint32, 0)
+	for _, addr := range removeds {
+		picked := false
+		for _, fun := range funs {
+			if addr >= fun.Address && addr <= fun.LastAddress() {
+				fmt.Printf("debug\tfunc 0x%08x accept bb 0x%08x\n", fun.Address, addr)
+				fun.BBAddresses = append(fun.BBAddresses, addr)
+				picked = true
+				break
+			}
+		}
+		if !picked {
+			orphans = append(orphans, addr)
+		}
+	}
+
+	for _, addr := range orphans {
+		fmt.Printf("debug\torphan bb 0x%08x\n", addr)
+	}
 }

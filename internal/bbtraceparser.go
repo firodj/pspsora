@@ -367,6 +367,7 @@ func (bbtrace *BBTraceParser) SetCurrentThreadPC(pc uint32) uint32 {
 }
 
 func (bbtrace *BBTraceParser) Log(level string, message string) {
+	// TODO:
 	if bbtrace.CurrentID != 1 {
 		return
 	}
@@ -411,6 +412,17 @@ func (bbtrace *BBTraceParser) ParsingBB(param BBTraceParam) error {
 	}
 
 	bbref := bbtrace.doc.BBManager.CreateReference(lastBB.Address, theBB.Address)
+	if brInstr.Info.IsConditional {
+		j_else := brInstr.Address + 4
+		if brInstr.Info.HasDelaySlot {
+			j_else += 4
+		}
+		if theBB.Address == j_else {
+			bbref.SetElse(true)
+		} else {
+			bbref.SetThen(true)
+		}
+	}
 
 	if brInstr.Mnemonic == "jal" || brInstr.Mnemonic == "jalr" {
 		ra := brInstr.Address + 4
@@ -419,7 +431,7 @@ func (bbtrace *BBTraceParser) ParsingBB(param BBTraceParam) error {
 		}
 
 		bbtrace.doc.BBManager.CreateReference(lastBB.Address, ra).SetAdjacent(true)
-		bbref.SetLinked(true)
+		bbref.SetCalled(true)
 
 		bbtrace.OnEnterFunc(theBB, ra)
 	} else if brInstr.Mnemonic == "jr" && brInstr.Args[0].Reg == "ra" {
@@ -520,7 +532,7 @@ func (bbtrace *BBTraceParser) OnEnterFunc(theBB *SoraBasicBlock, ra uint32) {
 		fn_start := bbtrace.doc.SymMap.GetFunctionStart(theBB.Address)
 		if fn_start != 0 {
 			bbtrace.Log("debug", fmt.Sprintf("split func at 0x%08x\n", theBB.Address))
-			theFunc, _ = bbtrace.doc.FunManager.SplitAt(theBB.Address)
+			_, theFunc = bbtrace.doc.FunManager.SplitAt(theBB.Address)
 
 			if theFunc == nil {
 				bbtrace.Log("error", fmt.Sprintf("split func 0x%08x\n", theBB.Address))
@@ -606,7 +618,7 @@ func (bbtrace *BBTraceParser) OnLeaveFunc(theBB *SoraBasicBlock) {
 				bbtrace.Log("info", fmt.Sprintf("leave func, bb 0x%08x", past_bb))
 			}
 
-			bbtrace.doc.BBManager.CreateReference(past_bb, theBB.Address).SetLinked(true)
+			bbtrace.doc.BBManager.CreateReference(past_bb, theBB.Address).SetReturned(true)
 
 			if currentThread.CallHistory != nil {
 				level := currentThread.Stack.Len()
@@ -708,18 +720,23 @@ func (bbtrace *BBTraceParser) OnMergingPastToLast(last_pc uint32) error {
 				if pastBrInstr.Info.IsBranchToRegister {
 					fmt.Printf("WARNING:\tunimplemented conditional register branch for merging\n")
 				}
+				bbtrace.doc.BBManager.CreateReference(pastBB.Address, next_addr).SetElse(true)
 			} else {
 				if pastBrInstr.Info.IsBranchToRegister {
 					break
 				} else if pastBrInstr.Info.BranchTarget != 0 {
 					next_addr = pastBrInstr.Info.BranchTarget
+					bbtrace.doc.BBManager.CreateReference(pastBB.Address, next_addr)
 				} else {
 					spew.Dump(pastBrInstr)
 					panic("todo")
 				}
+
 			}
+		} else {
+			bbtrace.doc.BBManager.CreateReference(pastBB.Address, next_addr).SetAdjacent(true)
 		}
-		bbtrace.doc.BBManager.CreateReference(pastBB.Address, next_addr).SetAdjacent(true)
+
 		past_addr = next_addr
 	}
 

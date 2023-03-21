@@ -26,7 +26,10 @@ type SoraBBRef struct {
 
 	IsDynamic  bool // TODO: immediate or by reg/mem/ptr
 	IsAdjacent bool // next/prev
-	IsLinked   bool // call/linked
+	IsCalled   bool // call/(linked)
+	IsReturned bool // ret/(linked)
+	IsThen     bool
+	IsElse     bool
 	IsVisited  bool // TODO: by bbtrace
 }
 
@@ -35,8 +38,20 @@ func (ref *SoraBBRef) SetAdjacent(v bool) *SoraBBRef {
 	return ref
 }
 
-func (ref *SoraBBRef) SetLinked(v bool) *SoraBBRef {
-	ref.IsLinked = true
+func (ref *SoraBBRef) SetCalled(v bool) *SoraBBRef {
+	ref.IsCalled = true
+	return ref
+}
+func (ref *SoraBBRef) SetReturned(v bool) *SoraBBRef {
+	ref.IsReturned = true
+	return ref
+}
+func (ref *SoraBBRef) SetThen(v bool) *SoraBBRef {
+	ref.IsThen = true
+	return ref
+}
+func (ref *SoraBBRef) SetElse(v bool) *SoraBBRef {
+	ref.IsElse = true
 	return ref
 }
 
@@ -45,8 +60,17 @@ func (ref *SoraBBRef) String() string {
 	if ref.IsAdjacent {
 		s = s + " a"
 	}
-	if ref.IsLinked {
-		s = s + " l"
+	if ref.IsCalled {
+		s = s + " c"
+	}
+	if ref.IsReturned {
+		s = s + " r"
+	}
+	if ref.IsThen {
+		s = s + " t"
+	}
+	if ref.IsElse {
+		s = s + " e"
 	}
 	return s
 }
@@ -148,9 +172,8 @@ func (bbmanager *BasicBlockManager) GetRef(from_addr, to_addr uint32) *SoraBBRef
 	return nil
 }
 
-func (bbmanager *BasicBlockManager) GetRefs(addr uint32) (xref_froms []*SoraBBRef, xref_tos []*SoraBBRef) {
+func (bbmanager *BasicBlockManager) GetEnterRefs(addr uint32) (xref_froms []*SoraBBRef) {
 	xref_froms = make([]*SoraBBRef, 0)
-	xref_tos = make([]*SoraBBRef, 0)
 
 	if from_bbs_, ok_in := bbmanager.refsToBB[addr]; ok_in {
 		for _, from_bb := range from_bbs_ {
@@ -159,6 +182,12 @@ func (bbmanager *BasicBlockManager) GetRefs(addr uint32) (xref_froms []*SoraBBRe
 			}
 		}
 	}
+
+	return
+}
+
+func (bbmanager *BasicBlockManager) GetExitRefs(addr uint32) (xref_tos []*SoraBBRef) {
+	xref_tos = make([]*SoraBBRef, 0)
 
 	if to_bbs, ok_out := bbmanager.refsFromBB[addr]; ok_out {
 		for _, to_bb := range to_bbs {

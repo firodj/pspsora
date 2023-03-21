@@ -35,7 +35,7 @@ func (anal *FunctionAnalyzer) Debug(cb BBYieldFunc) {
 		bb_addr := addresses[bb_i]
 		anal.doc.BBManager.Get(bb_addr)
 
-		_, xref_tos := anal.doc.BBManager.GetRefs(bb_addr)
+		xref_tos := anal.doc.BBManager.GetExitRefs(bb_addr)
 
 		if bb_adj != 0 {
 			if bb_adj != bb_addr {
@@ -91,7 +91,7 @@ func (anal *FunctionAnalyzer) Process() {
 		}
 		cur_visit.Visited = true
 
-		_, outfrom_bb := anal.doc.BBManager.GetRefs(cur_addr)
+		outfrom_bb := anal.doc.BBManager.GetExitRefs(cur_addr)
 		for _, xref_to_bb := range outfrom_bb {
 			bb_queues.Push(xref_to_bb.To)
 		}

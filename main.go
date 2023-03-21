@@ -9,6 +9,8 @@ import (
 	"os/signal"
 	"path/filepath"
 	"runtime"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/firodj/pspsora/internal"
@@ -65,7 +67,9 @@ func doRunningProcess(ctx context.Context) chan int {
 func testBBTrace(doc *internal.SoraDocument) *ffcli.Command {
 	fs := flag.NewFlagSet("testBBTrace", flag.ExitOnError)
 	var length uint = 0
+	var funcs string
 	fs.UintVar(&length, "length", 0, "length trace, 0 =all")
+	fs.StringVar(&funcs, "funcs", "start", "funcs to show, comma sep")
 
 	return &ffcli.Command{
 		Name:    "testBBTrace",
@@ -78,18 +82,32 @@ func testBBTrace(doc *internal.SoraDocument) *ffcli.Command {
 				return err
 			}
 
-			funStart := doc.FunManager.Get(doc.EntryAddr)
-			fmt.Printf("func name=%s addr=0x%x size=%d last=0x%x\n", funStart.Name, funStart.Address, funStart.Size, funStart.LastAddress())
-			anal := internal.NewFunctionAnalyzer(doc, funStart)
-			anal.Process()
-			anal.Debug(doc.GetPrintCodes)
+			funs := make([]*internal.SoraFunction, 0)
+			for _, fNorA := range strings.Split(funcs, ",") {
+				fNorA = strings.TrimSpace(fNorA)
 
-			fmt.Println()
-			funImport := doc.FunManager.Get(0x08a38a70)
-			anal2 := internal.NewFunctionAnalyzer(doc, funImport)
-			anal2.Process()
-			anal2.Debug(doc.GetPrintCodes)
+				if strings.HasPrefix(fNorA, "0x") {
+					fmt.Printf("trying %s\n", fNorA)
+					if addr, err := strconv.ParseInt(fNorA, 0, 32); err == nil {
+						if funStart := doc.FunManager.Get(uint32(addr)); funStart != nil {
+							funs = append(funs, funStart)
+							continue
+						}
+					} else {
+						fmt.Println(err)
+					}
+				}
+				funs2 := doc.FunManager.GetByName(fNorA)
+				funs = append(funs, funs2...)
+			}
 
+			// examples: 0x08a38a70
+			for _, fun := range funs {
+				fmt.Printf("func name=%s addr=0x%x size=%d last=0x%x\n", fun.Name, fun.Address, fun.Size, fun.LastAddress())
+				anal := internal.NewFunctionAnalyzer(doc, fun)
+				anal.Process()
+				anal.Debug(doc.GetPrintCodes)
+			}
 			return nil
 		},
 	}

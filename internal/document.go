@@ -9,6 +9,7 @@ import (
 
 	"gopkg.in/yaml.v3"
 
+	"github.com/davecgh/go-spew/spew"
 	"github.com/firodj/pspsora/bridge"
 )
 
@@ -392,6 +393,11 @@ func (doc *SoraDocument) GetPrintLines(state BBAnalState) {
 func (doc *SoraDocument) GetPrintCodes(state BBAnalState) {
 	label := doc.GetLabelName(state.BBAddr)
 
+	xref_froms := doc.BBManager.GetEnterRefs(state.BBAddr)
+	for _, xref := range xref_froms {
+		spew.Dump(xref)
+	}
+
 	fmt.Printf("%s:\t// 0x%08x", label, state.BBAddr)
 
 	if state.Visited {
@@ -418,9 +424,12 @@ func (doc *SoraDocument) GetPrintCodes(state BBAnalState) {
 			if ss != "" {
 				fmt.Printf("%s", ss)
 			}
+			if ok == -1 {
+				fmt.Printf("\t0x%08x\t%s", line.Address, line.Info.Dizz)
+				panic("error")
+			}
 		}
 
-		fmt.Printf("\t// %s", line.Info.Dizz)
 		fmt.Println()
 	}
 }
