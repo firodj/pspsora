@@ -3,6 +3,8 @@ package internal
 import (
 	"fmt"
 	"strings"
+
+	"github.com/firodj/pspsora/internal/codegen"
 )
 
 type SoraArgType string
@@ -133,4 +135,54 @@ func (arg *SoraArgument) IsNumber() bool {
 
 func (arg *SoraArgument) IsZero() bool {
 	return (arg.Type == ArgImm && arg.ValOfs == 0) || (arg.Type == ArgReg && arg.Reg == "zero")
+}
+
+func (arg *SoraArgument) ToPseudo() codegen.ASTNode {
+	switch arg.Type {
+	case ArgImm:
+		if arg.Label != "" {
+			e := codegen.ASTSymbolRef{}
+			e.Name = arg.Label
+			return &e
+		} else {
+			e := codegen.ASTNumber{
+				Value: arg.ValOfs,
+			}
+			return &e
+		}
+	case ArgReg:
+		if arg.Reg == "zero" {
+			e := codegen.ASTNumber{
+				Value: arg.ValOfs,
+			}
+			return &e
+		} else {
+			e := codegen.ASTSymbolRef{}
+			e.Name = arg.Reg
+			return &e
+		}
+	case ArgMem:
+		b := codegen.ASTSymbolRef{}
+		b.Name = arg.Reg
+		e := codegen.ASTPointer{
+			Sz:   "u32",
+			Expr: &b,
+		}
+		if arg.ValOfs != 0 {
+			n := codegen.ASTNumber{
+				Value: arg.ValOfs,
+			}
+			s := codegen.ASTBinary{
+				Op:    "+",
+				Left:  &b,
+				Right: &n,
+			}
+			e.Expr = &s
+		}
+		return &e
+	}
+
+	panic("unknown argument type")
+
+	//return nil
 }

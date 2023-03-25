@@ -3,6 +3,8 @@ package internal
 import (
 	"fmt"
 	"strconv"
+
+	"github.com/firodj/pspsora/internal/codegen"
 )
 
 type PseudoPrint func(instr *SoraInstruction, doc *SoraDocument) (string, int)
@@ -72,7 +74,7 @@ func PseudoNothing(instr *SoraInstruction, doc *SoraDocument) (string, int) {
 
 func PseudoAssign(instr *SoraInstruction, doc *SoraDocument) (string, int) {
 	op := ""
-	arg2_is_dec := false
+	//arg2_is_dec := false
 	arg1_signed := false
 	arg2_signed := false
 
@@ -89,7 +91,7 @@ func PseudoAssign(instr *SoraInstruction, doc *SoraDocument) (string, int) {
 		op = "^"
 	case "sll":
 		op = "<<"
-		arg2_is_dec = true
+		//arg2_is_dec = true
 	case "sltiu", "sltu":
 		op = "<"
 	case "slti":
@@ -102,10 +104,10 @@ func PseudoAssign(instr *SoraInstruction, doc *SoraDocument) (string, int) {
 	case "sra":
 		op = ">>"
 		arg1_signed = true
-		arg2_is_dec = true
+		//arg2_is_dec = true
 	case "srl":
 		op = ">>"
-		arg2_is_dec = true
+		//arg2_is_dec = true
 	}
 
 	if len(instr.Args) > 2 && op == "" {
@@ -116,78 +118,127 @@ func PseudoAssign(instr *SoraInstruction, doc *SoraDocument) (string, int) {
 		panic("invalid number of argument")
 	}
 
-	ss := instr.Args[0].Str(false) + " = "
+	s := codegen.ASTAssign{}
+
+	s_left := instr.Args[0].ToPseudo()
+
+	s_right := instr.Args[1].ToPseudo()
 
 	if arg1_signed {
-		ss += "(s32)"
+		s_right = &codegen.ASTUnary{
+			Op:   "s32",
+			Expr: s_right,
+		}
 	}
-	ss += instr.Args[1].Str(false)
 
 	if len(instr.Args) > 2 && !instr.Args[2].IsZero() {
-		if op != "" {
-			ss += " " + op
+		// Binary
+		if op == "" {
+			panic("missing op")
 		}
 
-		ss += " "
-		if arg2_signed {
-			ss += "(s32)"
+		s_right1 := codegen.ASTBinary{
+			Op:   op,
+			Left: s_right,
 		}
-		ss += instr.Args[2].Str(arg2_is_dec)
+
+		s_right2 := instr.Args[2].ToPseudo()
+
+		if arg2_signed {
+			s_right2 = &codegen.ASTUnary{
+				Op:   "s32",
+				Expr: s_right2,
+			}
+		}
+
+		s_right1.Right = s_right2
+		s_right = &s_right1
 	}
 
-	return ss, 0
+	s.Left = s_left
+	s.Right = s_right
+
+	return "--- " + s.String(), 0
 }
 
 func PseudoLoadUpper(instr *SoraInstruction, doc *SoraDocument) (string, int) {
-	ss := instr.Args[0].Str(false) + " = " + instr.Args[1].Str(false)
+	s := codegen.ASTAssign{}
 
-	//if instr.Args[1].IsZero() {
-	//}
+	s_left := instr.Args[0].ToPseudo()
 
-	if instr.Args[1].IsNumber() {
-		ss += "0000"
-	} else {
-		ss += " << 16"
+	var s_right codegen.ASTNode
+
+	s_right1 := instr.Args[1].ToPseudo()
+
+	s_right2 := &codegen.ASTNumber{
+		Value: 16,
 	}
 
-	return ss, 0
+	s_right = &codegen.ASTBinary{
+		Op:    "<<",
+		Left:  s_right1,
+		Right: s_right2,
+	}
+	s.Right = s_right
+
+	s.Left = s_left
+	s.Right = s_right
+
+	return "--- " + s.String(), 0
 }
 
 func PseudoLoad(instr *SoraInstruction, doc *SoraDocument) (string, int) {
+	s := codegen.ASTAssign{}
+
+	s_left := instr.Args[0].ToPseudo()
+	s_right := instr.Args[1].ToPseudo()
+
 	suffix := instr.Mnemonic[1:]
-	sz := ""
-	mask := ""
-
-	if suffix == "w" {
-		sz = "u32"
-	} else if suffix == "bu" {
-		sz = "u8"
-		mask = " & 0xff"
-	} else {
-		panic("unknown suffix")
+	switch suffix {
+	case "w":
+		s_right.(*codegen.ASTPointer).Sz = "u32"
+	case "bu":
+		s_right.(*codegen.ASTPointer).Sz = "u8"
+		//mask = " & 0xff"
+	case "hu":
+		s_right.(*codegen.ASTPointer).Sz = "u16"
+	case "b":
+		s_right.(*codegen.ASTPointer).Sz = "s8"
+		//mask = " & 0xff"
+	case "h":
+		s_right.(*codegen.ASTPointer).Sz = "s16"
+	default:
+		panic("unknown suffix: " + suffix)
 	}
 
-	ss := instr.Args[0].Str(false) + " = (" + sz + ")" + instr.Args[1].Str(false)
-	if mask != "" {
-		ss += mask
-	}
+	s.Left = s_left
+	s.Right = s_right
 
-	return ss, 0
+	return "--- " + s.String(), 0
 }
 
 func PseudoStore(instr *SoraInstruction, doc *SoraDocument) (string, int) {
-	sz := ""
+	s := codegen.ASTAssign{}
+
+	s_left := instr.Args[1].ToPseudo()
+	s_right := instr.Args[0].ToPseudo()
+
 	suffix := instr.Mnemonic[1:]
-	if suffix == "b" {
-		sz = "u8"
-	} else if suffix == "h" {
-		sz = "u16"
-	} else if suffix == "w" {
-		sz = "u32"
+	switch suffix {
+	case "b":
+		s_left.(*codegen.ASTPointer).Sz = "u8"
+	case "h":
+		s_left.(*codegen.ASTPointer).Sz = "u16"
+	case "w":
+		s_left.(*codegen.ASTPointer).Sz = "u32"
+	default:
+		panic("unknown suffix: " + suffix)
 	}
 
-	ss := "(" + sz + ")" + instr.Args[1].Str(false) + " = " + instr.Args[0].Str(false)
-	return ss, 0
+	s.Left = s_left
+	s.Right = s_right
+
+	return "--- " + s.String(), 0
 }
 
 var maskToType map[byte]string = map[byte]string{
@@ -205,41 +256,75 @@ var maskToType map[byte]string = map[byte]string{
 func PseudoSyscall(instr *SoraInstruction, doc *SoraDocument) (string, int) {
 	moduleIndex, funcIndex := instr.GetSyscallNumber()
 
-	ss := ""
+	//ss := ""
 
 	_, fun := doc.GetHLE(moduleIndex, funcIndex)
 	if fun != nil {
+		s_name := codegen.ASTSymbolRef{}
+		s_name.Name = doc.GetHLEFuncName(moduleIndex, funcIndex)
+		s := codegen.ASTCall{
+			Expr: &s_name,
+		}
+
+		for arg_i := range fun.ArgMask {
+			//if arg_i > 0 {
+			//	ss += ", "
+			//}
+			a_name := codegen.ASTSymbolRef{}
+			a_name.Name = doc.GetRegName(0, 4+arg_i)
+			arg := codegen.ASTUnary{
+				Op:   maskToType[fun.ArgMask[arg_i]],
+				Expr: &a_name,
+			}
+			//ss += "(" + maskToType[fun.ArgMask[arg_i]] + ")" + doc.GetRegName(0, 4+arg_i)
+			s.Args = append(s.Args, &arg)
+		}
 
 		if len(fun.RetMask) > 0 {
-			ss += "v0 = (" + maskToType[fun.RetMask[0]] + ")"
+			sa := codegen.ASTAssign{}
+			sa.Right = &s
+
+			for ret_i := range fun.RetMask {
+				if ret_i == 0 {
+					s_left := codegen.ASTSymbolRef{}
+					s_left.Name = "v0"
+					sa.Left = &s_left
+					continue
+				}
+
+				//if ret_i > 1 {
+				//	ss += ", "
+				//}
+				//ss += "(*" + maskToType[fun.RetMask[ret_i]] + ")&v" + strconv.Itoa(ret_i)
+				ret_a := codegen.ASTSymbolRef{}
+				ret_a.Name = "v" + strconv.Itoa(ret_i)
+				arg := codegen.ASTUnary{
+					Op:   "*" + maskToType[fun.RetMask[ret_i]] + "&",
+					Expr: &ret_a,
+				}
+				s.Args = append(s.Args, &arg)
+			}
+
+			//s_left := codegen.ASTSymbolRef{}
+			//s_left.Name = "v0"
+
+			//ss += "v0 = (" + maskToType[fun.RetMask[0]] + ")"
+			//s.Left = &s_left
 		}
 
-		ss += doc.GetHLEFuncName(moduleIndex, funcIndex) + "("
-		for arg_i := range fun.ArgMask {
-			if arg_i > 0 {
-				ss += ", "
-			}
-			ss += "(" + maskToType[fun.ArgMask[arg_i]] + ")" + doc.GetRegName(0, 4+arg_i)
-		}
+		//ss += +"("
 
-		for ret_i := range fun.RetMask {
-			if ret_i == 0 {
-				continue
-			}
-
-			if ret_i > 1 {
-				ss += ", "
-			}
-			ss += "(*" + maskToType[fun.RetMask[ret_i]] + ")&v" + strconv.Itoa(ret_i)
-		}
-
-		ss += ")"
-		return ss, 0
+		//ss += ")"
+		return "--- " + s.String(), 0
 	}
 
-	ss = fmt.Sprintf("m0x%02x::f0x%03x()", moduleIndex, funcIndex)
-	return ss, -1
+	s_name := codegen.ASTSymbolRef{}
+	s_name.Name = fmt.Sprintf("m0x%02x::f0x%03x()", moduleIndex, funcIndex)
+	s := codegen.ASTCall{
+		Expr: &s_name,
+	}
 
+	return "--- " + s.String(), 0
 }
 
 func PseudoJump(instr *SoraInstruction, doc *SoraDocument) (string, int) {
