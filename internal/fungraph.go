@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/firodj/pspsora/binarysearchtree"
+	"github.com/firodj/bst"
 	orderedmap "github.com/wk8/go-ordered-map/v2"
 )
 
@@ -23,7 +23,7 @@ type FunGraphNode struct {
 
 type FunGraph struct {
 	root  *FunGraphNode
-	nodes *binarysearchtree.AVLTree[FunGraphNodeID, *FunGraphNode]
+	nodes *bst.AVLTree[FunGraphNodeID, *FunGraphNode]
 	index FunGraphNodeID
 }
 
@@ -34,7 +34,7 @@ func NewFunGraph() *FunGraph {
 			ParentID: -1,
 			Subs:     orderedmap.New[uint32, FunGraphNodeID](),
 		},
-		nodes: new(binarysearchtree.AVLTree[FunGraphNodeID, *FunGraphNode]),
+		nodes: new(bst.AVLTree[FunGraphNodeID, *FunGraphNode]),
 	}
 	g.nodes.Insert(g.root.ID, g.root)
 	g.index++

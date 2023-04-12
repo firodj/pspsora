@@ -1,7 +1,7 @@
 package internal
 
 import (
-	"github.com/firodj/pspsora/binarysearchtree"
+	"github.com/firodj/bst"
 	"github.com/firodj/pspsora/models"
 )
 
@@ -15,7 +15,7 @@ type SoraInstruction struct {
 type InstructionManager struct {
 	doc *SoraDocument
 
-	instructions binarysearchtree.AVLTree[uint32, *SoraInstruction]
+	instructions bst.AVLTree[uint32, *SoraInstruction]
 }
 
 func NewInstructionManager(doc *SoraDocument) *InstructionManager {

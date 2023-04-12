@@ -3,12 +3,12 @@ package internal
 import (
 	"fmt"
 
-	"github.com/firodj/pspsora/binarysearchtree"
+	"github.com/firodj/bst"
 )
 
 type FunctionManager struct {
 	doc           *SoraDocument
-	functions     binarysearchtree.AVLTree[uint32, *SoraFunction]
+	functions     bst.AVLTree[uint32, *SoraFunction]
 	mapNameToFunc map[string][]uint32
 }
 

@@ -3,7 +3,7 @@ package internal
 import (
 	"fmt"
 
-	"github.com/firodj/pspsora/binarysearchtree"
+	"github.com/firodj/bst"
 )
 
 type SoraBasicBlock struct {
@@ -78,7 +78,7 @@ func (ref *SoraBBRef) String() string {
 type BasicBlockManager struct {
 	doc *SoraDocument
 
-	basicBlocks binarysearchtree.AVLTree[uint32, *SoraBasicBlock]
+	basicBlocks bst.AVLTree[uint32, *SoraBasicBlock]
 	refs        map[BBRefKey]*SoraBBRef
 	refsToBB    map[uint32][]uint32
 	refsFromBB  map[uint32][]uint32

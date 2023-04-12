@@ -3,7 +3,7 @@ package internal
 import (
 	"fmt"
 
-	"github.com/firodj/pspsora/binarysearchtree"
+	"github.com/firodj/bst"
 )
 
 type BlockGraph struct {
@@ -19,7 +19,7 @@ func (b *BlockGraph) End(n RefTs) {
 
 type StackGraph struct {
 	Level       int
-	blockGraphs binarysearchtree.AVLTree[RefTs, *BlockGraph]
+	blockGraphs bst.AVLTree[RefTs, *BlockGraph]
 }
 
 func (s *StackGraph) Size() int {
