@@ -327,14 +327,14 @@ func PseudoSyscall(instr *SoraInstruction, doc *SoraDocument) (string, int) {
 	return "--- " + s.String(), 0
 }
 
-func PseudoJump(instr *SoraInstruction, doc *SoraDocument) (string, int) {
+func PseudoJump(instr *SoraInstruction, doc *SoraDocument) (ss string, skip int) {
 	jal_ra := instr.Address + 4
 	if instr.Info.HasDelaySlot {
 		jal_ra += 4
 	}
 
 	arg0 := instr.Args[0]
-	ss := ""
+
 	ss_next := ""
 
 	if instr.Info.HasDelaySlot {
@@ -348,41 +348,59 @@ func PseudoJump(instr *SoraInstruction, doc *SoraDocument) (string, int) {
 
 	switch instr.Mnemonic {
 	case "jal":
-		if ss_next != "" {
-			ss += ss_next + "\n"
-		}
-
 		if arg0.IsZero() {
-			return "", -1
+			panic("unknown jal target:" + arg0.Str(false))
 		}
 
-		ss += "v0 = " + arg0.Str(false) + "(...);"
-		ss += fmt.Sprintf("\t/* { ra = 0x%08x; ", jal_ra)
-		ss += fmt.Sprintf("goto %s; } */", arg0.CodeLabel(doc))
+		sra := codegen.ASTAssign{}
+
+		s_left := codegen.ASTSymbolRef{}
+		s_left.Name = "ra"
+		sra.Left = &s_left
+
+		s_right := codegen.ASTNumber{
+			Value: int(jal_ra),
+		}
+		sra.Right = &s_right
+
+		sgo := codegen.ASTGoto{
+			Label: arg0.CodeLabel(doc),
+		}
+
+		ss = ss_next + "--- " + "{ " + sra.String() + "; " + sgo.String() + "; }"
+
+		//ss += "v0 = " + arg0.Str(false) + "(...);"
+		//ss += fmt.Sprintf("\t/* { ra = 0x%08x; ", jal_ra)
+		//ss += fmt.Sprintf("goto %s; } */", arg0.CodeLabel(doc))
 
 	case "j":
-		if ss_next != "" {
-			ss += ss_next + "\n"
+		sgo := codegen.ASTGoto{
+			Label: arg0.CodeLabel(doc),
 		}
-		ss += fmt.Sprintf("goto %s;", arg0.CodeLabel(doc))
+
+		ss = ss_next + "--- " + sgo.String()
+		//ss += fmt.Sprintf("goto %s;", arg0.CodeLabel(doc))
 	case "jr":
-		if ss_next != "" {
-			ss += ss_next + "\n"
+		sgo := codegen.ASTGoto{}
+
+		if arg0.Type != ArgReg || arg0.Reg != "ra" {
+			panic("unknown return: " + arg0.Str(false))
 		}
-		if arg0.Type == ArgReg && arg0.Reg == "ra" {
-			ss += "return v0;"
-			ss += "\t/* { goto -> ra; } */"
-		} else {
-			ss += fmt.Sprintf("goto %s;", arg0.Str(false))
-		}
+
+		//ss += "return v0;"
+		//ss += "\t/* { goto -> ra; } */"
+		sgo.Label = "ra"
+
+		ss = ss_next + "--- " + sgo.String()
 	default:
 		panic("unknown jump")
 	}
 
 	if instr.Info.HasDelaySlot {
-		return ss, 1
+		skip = 1
 	}
-	return ss, 0
+
+	return
 }
 
 func PseudoCondJump(instr *SoraInstruction, doc *SoraDocument) (string, int) {
