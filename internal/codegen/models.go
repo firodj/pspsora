@@ -12,6 +12,8 @@ const (
 	TypeASTSymbolRef NodeType = "symbol_ref"
 	TypeASTPointer   NodeType = "pointer"
 	TypeASTGoto      NodeType = "goto"
+	TypeASTBlock     NodeType = "block"
+	TypeASTIf        NodeType = "if"
 )
 
 type ASTNode interface {
@@ -153,4 +155,33 @@ func (a *ASTGoto) Type() NodeType {
 func (a *ASTGoto) String() string {
 	s := fmt.Sprintf("goto %s", a.Label)
 	return s
+}
+
+//
+
+type ASTBlock struct {
+	ASTNode
+	Body []ASTNode
+}
+
+func (a *ASTBlock) Type() NodeType {
+	return TypeASTBlock
+}
+
+func (a *ASTBlock) String() string {
+	return "TODDO:"
+}
+
+//
+
+type ASTIf struct {
+	ASTNode
+}
+
+func (a *ASTIf) Type() NodeType {
+	return TypeASTIf
+}
+
+func (a *ASTIf) String() string {
+	return "TODDO:"
 }
